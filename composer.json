@@ -13,12 +13,6 @@
             "email": "hej@arrigoo.io"
         }
     ],
-    "repositories": [
-        {
-            "type": "vcs",
-            "url":  "git@github.com:Arrigoo/cdp-php-sdk.git"
-        }
-    ],
     "minimum-stability": "dev",
     "require": {
         "arrigoo/cdp-php-sdk": "0.1"
