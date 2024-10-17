@@ -1,5 +1,5 @@
 {
-    "name": "arrigoo/wp-cdp-block-control",
+    "name": "arrigoo/wp-block-control",
     "description": "Control display of your blocks based on segments from the Arrigoo CDP.",
     "type": "wordpress-plugin",
     "autoload": {
