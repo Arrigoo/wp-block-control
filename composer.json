@@ -21,6 +21,6 @@
     ],
     "minimum-stability": "dev",
     "require": {
-        "Arrigoo/cdp-php-sdk": "dev-master"
+        "arrigoo/arrigoo-cdp-sdk": "dev-master"
     }
 }
