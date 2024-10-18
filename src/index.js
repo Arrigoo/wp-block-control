@@ -2,33 +2,12 @@ import { addFilter } from '@wordpress/hooks';
 import { __ } from '@wordpress/i18n';
 import { InspectorControls } from '@wordpress/block-editor';
 import { ExternalLink, PanelBody, PanelRow, CheckboxControl } from '@wordpress/components';
-import { useEffect, useState } from '@wordpress/element';
 
-function addImageInspectorControls( BlockEdit ) {
-	// const [segments, setSegments] = useState([])
-	// const [selectedSegments, setSelectedSegments] = useState([]);
-	
-	// Fetch segments via AJAX
-    // useEffect(() => {
-		//     // wp.apiFetch({ path: '/wp-json/your-namespace/v1/segments' }).then((data) => {
-			//     //     setSegments(data);
-			//     // });
-			// 	setSegments([
-				// 		{ sys_title: 'seg_1', title: 'Segment 1' },
-				// 		{ sys_title: 'seg_2', title: 'Segment 2' },
-				// 		{ sys_title: 'seg_3', title: 'Segment 3' },
-				// 	]);
-				// }, []);
-				
-				
+function addSegmentDisplayControls( BlockEdit ) {
+
 	return ( props ) => {
-	//	const [newSelectedSegments, setSelectedSegments] = useState([]);
 		const { attributes, setAttributes } = props;
-		const segments = [
-			{ sys_title: 'binge_reader', title: 'Binge reader' },
-			{ sys_title: 'top_reader', title: 'Top reader' },
-			{ sys_title: 'seg_3', title: 'Segment 3' },
-		];
+		const segments = window.arrigooCdpSegments || [];
 
 		// Retrieve selected attributes from the block.
 		const selectedSegments = attributes.selectedSegments || [];
@@ -82,7 +61,7 @@ function addImageInspectorControls( BlockEdit ) {
 addFilter(
 	'editor.BlockEdit',
 	'arrigoo-cdp/arrigoo-segment-block-control-script',
-	addImageInspectorControls
+	addSegmentDisplayControls
 );
 
 const helpText = (
