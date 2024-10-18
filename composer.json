@@ -4,7 +4,7 @@
     "type": "wordpress-plugin",
     "autoload": {
         "psr-4": {
-            "Arrigoo\\WpCdpBlockControl\\": "src/"
+            "Arrigoo\\WpCdpBlockControl\\": "src_php/"
         }
     },
     "authors": [
