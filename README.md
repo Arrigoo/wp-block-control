@@ -9,3 +9,5 @@ In frontend, a script is loaded that communicates with the CDP API to exchange d
 NB: All the blocks are being rendered, but will remain hidden until the frontend script determine whether to display or remove them.
 
 Requires an autoloader https://deliciousbrains.com/storing-wordpress-in-git/
+
+Read more about the Arrigoo CDP at https://arrigoo.io
