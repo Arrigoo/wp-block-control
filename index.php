@@ -7,6 +7,11 @@
  * Author: Arrigoo.io
  */
 
+// In case we are in a non-composer environment.
+if (file_exists(__DIR__ . '/vendor/autoload.php')) {
+    require_once __DIR__ . '/vendor/autoload.php';
+}
+
 require_once __DIR__ . '/src_php/BlockControl.php';
 require_once __DIR__ . '/src_php/EndUser.php';
 
