@@ -5,8 +5,8 @@ namespace Arrigoo\WpCdpBlockControl;
 // Add the Arrigoo CDP script to frontend.
 class EndUser {
     public static function arrigoo_cdp_custom_javascript() {
-        wp_enqueue_script( 
-            'arrigoo_cdp', 
+        wp_enqueue_script(
+            'arrigoo_cdp',
             plugin_dir_url( __FILE__ ) . '../build/bundle.js',
             array(), '1.0.0', true );
         ?>
@@ -16,7 +16,7 @@ class EndUser {
                 }
             </style>
             <script type="text/javascript">
-                window.arrigooHost = '<?= getenv('CDP_URL_FRONTEND') ?>'; 
+                window.arrigooHost = '<?= getenv('CDP_API_URL') ?>';
                 window.document.addEventListener('ao_loaded', (evt) => {
                     const storage = window.argo;
                     console.log('loaded', storage)
@@ -27,7 +27,7 @@ class EndUser {
                         window.argo.set('ident', { id_type: 'foreignid1', id_value: subscriberToken });
                     }
                     window.argo.sendInitEvent();
-                
+
                     var segments = argo.get("s");
                     var blocks = document.querySelectorAll('[data-segments]');
                     blocks.forEach(function(block) {
