@@ -8,7 +8,8 @@ class EndUser {
         wp_enqueue_script(
             'arrigoo_cdp',
             plugin_dir_url( __FILE__ ) . '../build/bundle.js',
-            array(), '1.0.0', true );
+          //  array(), '1.0.0', true
+          );
         ?>
             <style>
                 *[data-segments] {
@@ -21,23 +22,29 @@ class EndUser {
                     const storage = window.argo;
                     console.log('loaded', storage)
                     const userData = storage.get('ident');
-                    subscriberToken = window.argo.getSearchValue('st');
-                    if (subscriberToken) {
-                        window.argo.send('pageview_nl', subscriberToken, { intval: 1, topics: ['pony', 'fisk'] });
-                        window.argo.set('ident', { id_type: 'foreignid1', id_value: subscriberToken });
-                    }
                     window.argo.sendInitEvent();
-
-                    var segments = argo.get("s");
+                    var user_segments = argo.get("s");
                     var blocks = document.querySelectorAll('[data-segments]');
+                    var unknownUser = !user_segments || user_segments.length === 0;
                     blocks.forEach(function(block) {
                         var blockSegments = block.getAttribute('data-segments').split(' ');
                         var showBlock = false;
                         blockSegments.forEach(function(segment) {
-                            if (segments.indexOf(segment) !== -1) {
+                            if (unknownUser && segment === 'unknown') {
+                                showBlock = true;
+                                return;
+                            }
+                            if (user_segments.indexOf(segment) !== -1) {
                                 showBlock = true;
                             }
                         });
+                        var hideSegments = blockSements.filter(s => s.startsWith('!')).map(s => s.substring(1));
+                        for (var i = 0; i < hideSegments.length; i++) {
+                            if (user_segments.indexOf(hideSegments[i]) !== -1) {
+                                showBlock = false;
+                                break;
+                            }
+                        }
                         if (showBlock) {
                             block.style.display = 'block';
                             return;

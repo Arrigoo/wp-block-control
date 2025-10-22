@@ -11,18 +11,28 @@ class BlockControl {
      * Add the Arrigoo Segments as block controls.
      */
     public static function arrigoo_segment_block_control_enqueue_assets() {
+        $script_path = plugin_dir_path(__FILE__) . '../build/index.js';
+        $script_url = plugin_dir_url( __FILE__ ) . '../build/index.js';
+
         wp_enqueue_script(
             'arrigoo-segment-block-control-script',
-            plugin_dir_url( __FILE__ ) . '../build/index.js',
-            array('wp-blocks', 'wp-element', 'wp-edit-post', 'wp-components', 'wp-data'),
-            @filemtime(plugin_dir_path(__FILE__) . 'src/index.js')
+            $script_url,
+            array('wp-blocks', 'wp-element', 'wp-edit-post', 'wp-components', 'wp-data', 'wp-hooks', 'wp-i18n', 'wp-block-editor'),
+            file_exists($script_path) ? filemtime($script_path) : '1.0.0',
+            false
         );
+
         $segments = self::arrigoo_cdp_get_segments();
-        ?>
-            <script>
-                window.arrigooCdpSegments = <?= json_encode($segments); ?>;
-            </script>
-        <?php
+
+        // Use wp_add_inline_script to add data in a WordPress-aligned way
+        wp_add_inline_script(
+            'arrigoo-segment-block-control-script',
+            sprintf(
+                'window.arrigooCdpSegments = %s;',
+                wp_json_encode($segments)
+            ),
+            'before'
+        );
     }
 
     /**
@@ -40,7 +50,7 @@ class BlockControl {
     }
 
     /**
-     * Instanitate the CDP client and request segments.
+     * Instanitate the CDP client and request segments for use in admin.
      */
     public static function arrigoo_cdp_get_segments() {
         $cached_segments = get_option('ARRIGOO_CDP');
