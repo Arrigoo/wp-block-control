@@ -11,6 +11,16 @@ class Client extends ClientBase
         ]);
         return $response;
     }
+
+
+    public function getProperties(): array
+    {
+        $response = $this->get('property', [
+            'headers' => $this->getHeaders(),
+        ]);
+        return $response;
+    }
+
     public static function create(
         string $apiUrl,
         string $user,
@@ -19,10 +29,10 @@ class Client extends ClientBase
     {
         $rBody = parent::authInit($apiUrl, $user, $password);
         return new self(
-            $rBody['refreshToken'], 
-            $apiUrl, 
-            $rBody['token'],
-            $rBody['expire'],
+            $rBody['refresh_token'],
+            $apiUrl,
+            $rBody['access_token'],
+            $rBody['expiry'],
         );
     }
 }

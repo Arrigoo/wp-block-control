@@ -15,6 +15,6 @@
     ],
     "minimum-stability": "dev",
     "require": {
-        "arrigoo/cdp-php-sdk": "0.1"
+        "arrigoo/cdp-php-sdk": "0.1.*"
     }
 }

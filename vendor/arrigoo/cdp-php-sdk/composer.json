@@ -2,7 +2,7 @@
     "name": "arrigoo/cdp-php-sdk",
     "type": "library",
     "require": {
-        "guzzlehttp/guzzle": "8.0.x-dev"
+        "guzzlehttp/guzzle": "7.9"
     },
     "license": "GPL-2.0-or-later",
     "autoload": {
@@ -16,5 +16,5 @@
             "email": "kristoffer@arrigoo.io"
         }
     ],
-    "minimum-stability": "dev"
+    "minimum-stability": "stable"
 }
