@@ -20,7 +20,6 @@ class EndUser {
                 window.arrigooHost = '<?= getenv('CDP_API_URL') ?>';
                 window.document.addEventListener('ao_loaded', (evt) => {
                     const storage = window.argo;
-                    console.log('loaded', storage)
                     const userData = storage.get('ident');
                     window.argo.sendInitEvent();
                     var user_segments = argo.get("s");
