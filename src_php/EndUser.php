@@ -27,23 +27,30 @@ class EndUser {
                     var blocks = document.querySelectorAll('[data-segments]');
                     var unknownUser = !user_segments || user_segments.length === 0;
                     blocks.forEach(function(block) {
-                        var blockSegments = block.getAttribute('data-segments').split(' ');
+                        var allSegments = block.getAttribute('data-segments').split(' ') || [];
+                        var hideSegments = allSegments.filter(s => s.startsWith('!')).map(s => s.substring(1));
+                        var blockSegments = allSegments.filter(s => !s.startsWith('!'));
                         var showBlock = false;
                         blockSegments.forEach(function(segment) {
-                            if (unknownUser && segment === 'unknown') {
+                            if ((unknownUser || !user_segments) && segment === 'unknown') {
                                 showBlock = true;
                                 return;
                             }
-                            if (user_segments.indexOf(segment) !== -1) {
+                            if (user_segments && user_segments.indexOf(segment) !== -1) {
                                 showBlock = true;
                             }
                         });
-                        var hideSegments = blockSements.filter(s => s.startsWith('!')).map(s => s.substring(1));
+                        showBlock = showBlock || blockSegments.length === 0;
                         for (var i = 0; i < hideSegments.length; i++) {
-                            if (user_segments.indexOf(hideSegments[i]) !== -1) {
+                            if ((unknownUser || !user_segments) && hideSegments[i] === 'unknown') {
+                                showBlock = false;
+                                return;
+                            }
+                            if (user_segments && user_segments.indexOf(hideSegments[i]) !== -1) {
                                 showBlock = false;
                                 break;
                             }
+
                         }
                         if (showBlock) {
                             block.style.display = 'block';
