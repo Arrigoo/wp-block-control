@@ -5,10 +5,11 @@ namespace Arrigoo\WpCdpBlockControl;
 // Add the Arrigoo CDP script to frontend.
 class EndUser {
     public static function arrigoo_cdp_custom_javascript() {
-        wp_enqueue_script( 
-            'arrigoo_cdp', 
+        wp_enqueue_script(
+            'arrigoo_cdp',
             plugin_dir_url( __FILE__ ) . '../build/bundle.js',
-            array(), '1.0.0', true );
+          //  array(), '1.0.0', true
+          );
         ?>
             <style>
                 *[data-segments] {
@@ -16,28 +17,41 @@ class EndUser {
                 }
             </style>
             <script type="text/javascript">
-                window.arrigooHost = '<?= getenv('CDP_URL_FRONTEND') ?>'; 
+                window.arrigooHost = '<?= getenv('CDP_API_URL') ?>';
                 window.document.addEventListener('ao_loaded', (evt) => {
                     const storage = window.argo;
                     console.log('loaded', storage)
                     const userData = storage.get('ident');
-                    subscriberToken = window.argo.getSearchValue('st');
-                    if (subscriberToken) {
-                        window.argo.send('pageview_nl', subscriberToken, { intval: 1, topics: ['pony', 'fisk'] });
-                        window.argo.set('ident', { id_type: 'foreignid1', id_value: subscriberToken });
-                    }
                     window.argo.sendInitEvent();
-                
-                    var segments = argo.get("s");
+                    var user_segments = argo.get("s");
                     var blocks = document.querySelectorAll('[data-segments]');
+                    var unknownUser = !user_segments || user_segments.length === 0;
                     blocks.forEach(function(block) {
-                        var blockSegments = block.getAttribute('data-segments').split(' ');
+                        var allSegments = block.getAttribute('data-segments').split(' ') || [];
+                        var hideSegments = allSegments.filter(s => s.startsWith('!')).map(s => s.substring(1));
+                        var blockSegments = allSegments.filter(s => !s.startsWith('!'));
                         var showBlock = false;
                         blockSegments.forEach(function(segment) {
-                            if (segments.indexOf(segment) !== -1) {
+                            if ((unknownUser || !user_segments) && segment === 'unknown') {
+                                showBlock = true;
+                                return;
+                            }
+                            if (user_segments && user_segments.indexOf(segment) !== -1) {
                                 showBlock = true;
                             }
                         });
+                        showBlock = showBlock || blockSegments.length === 0;
+                        for (var i = 0; i < hideSegments.length; i++) {
+                            if ((unknownUser || !user_segments) && hideSegments[i] === 'unknown') {
+                                showBlock = false;
+                                return;
+                            }
+                            if (user_segments && user_segments.indexOf(hideSegments[i]) !== -1) {
+                                showBlock = false;
+                                break;
+                            }
+
+                        }
                         if (showBlock) {
                             block.style.display = 'block';
                             return;
