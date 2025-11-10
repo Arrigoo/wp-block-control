@@ -10,6 +10,9 @@ class EndUser {
             plugin_dir_url( __FILE__ ) . '../build/bundle.js',
           //  array(), '1.0.0', true
           );
+
+        // Get API URL with fallback order: settings -> env vars -> constants
+        $apiUrl = AdminSettings::get_config_value('api_url');
         ?>
             <style>
                 *[data-segments] {
@@ -17,7 +20,7 @@ class EndUser {
                 }
             </style>
             <script type="text/javascript">
-                window.arrigooHost = '<?= getenv('CDP_API_URL') ?>';
+                window.arrigooHost = '<?= esc_js($apiUrl) ?>';
                 window.document.addEventListener('ao_loaded', (evt) => {
                     const storage = window.argo;
                     const userData = storage.get('ident');
