@@ -49,6 +49,9 @@ class BlockControl {
         $apiUrl = getenv('CDP_API_URL');
         $apiKey = getenv('CDP_API_KEY');
         $cdpUser = getenv('CDP_USER');
+        if (!$apiUrl || !$apiKey || !$cdpUser) {
+            return [];
+        }
         $client = CdpClient::create($apiUrl, $cdpUser, $apiKey);
         $segments = $client->getSegments();
         update_option('ARRIGOO_CDP', $segments);

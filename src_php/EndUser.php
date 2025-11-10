@@ -16,15 +16,14 @@ class EndUser {
                 }
             </style>
             <script type="text/javascript">
-                window.arrigooHost = '<?= getenv('CDP_URL_FRONTEND') ?>'; 
+                window.arrigooHost = window.arrigooHost || '<?= getenv('CDP_URL_FRONTEND') ?>'; 
                 window.document.addEventListener('ao_loaded', (evt) => {
                     const storage = window.argo;
-                    console.log('loaded', storage)
                     const userData = storage.get('ident');
                     subscriberToken = window.argo.getSearchValue('st');
                     if (subscriberToken) {
-                        window.argo.send('pageview_nl', subscriberToken, { intval: 1, topics: ['pony', 'fisk'] });
                         window.argo.set('ident', { id_type: 'foreignid1', id_value: subscriberToken });
+                        window.argo.send('pageview_nl', subscriberToken, { intval: 1 });
                     }
                     window.argo.sendInitEvent();
                 
