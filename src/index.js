@@ -1,7 +1,7 @@
 import { addFilter } from '@wordpress/hooks';
 import { __ } from '@wordpress/i18n';
 import { InspectorControls } from '@wordpress/block-editor';
-import { ExternalLink, PanelBody, PanelRow, CheckboxControl } from '@wordpress/components';
+import { ExternalLink, PanelBody, FormTokenField, Tooltip } from '@wordpress/components';
 
 function addSegmentDisplayControls( BlockEdit ) {
 
@@ -11,18 +11,89 @@ function addSegmentDisplayControls( BlockEdit ) {
 
 		// Retrieve selected attributes from the block.
 		const selectedSegments = attributes.selectedSegments || [];
-		
-		const handleCheckboxChange = (segment, selectedSegments) => {
-			selectedSegments = selectedSegments || [];	
-			if (selectedSegments.includes(segment)) {
-				const newSelection = selectedSegments.filter((s) => s !== segment);
-				console.log('removing segment', segment, newSelection);
-				return newSelection;
-			}
-			const newSelection = [...selectedSegments, segment];
-			console.log('adding segment', segment, newSelection);
-			return newSelection
+
+		// Create a map of sys_title to title for display purposes
+		const segmentMap = segments.reduce((acc, segment) => {
+			acc[segment.sys_title] = segment.title;
+			return acc;
+		}, {});
+
+		// Add 'unknown' option to the segment map
+		segmentMap['unknown'] = 'Unknown user';
+
+		// Get available segment titles for suggestions, including 'Unknown user'
+		const availableSegmentTitles = [
+			'Unknown user',
+			...segments.map(segment => segment.title)
+		];
+
+		// Split selectedSegments into show (without !) and hide (with !)
+		const showSegments = selectedSegments.filter(seg => !seg.startsWith('!'));
+		const hideSegments = selectedSegments
+			.filter(seg => seg.startsWith('!'))
+			.map(seg => seg.substring(1)); // Remove the '!' prefix for display
+
+		// Convert sys_titles to display titles for the "Show to segments" field
+		const showTitles = showSegments
+			.map(sysTitle => segmentMap[sysTitle])
+			.filter(Boolean);
+
+		// Convert sys_titles to display titles for the "Hide from segments" field
+		const hideTitles = hideSegments
+			.map(sysTitle => segmentMap[sysTitle])
+			.filter(Boolean);
+
+		const handleShowSegmentChange = (selectedTitles) => {
+			// Convert display titles back to sys_titles
+			const newShowSysTitles = selectedTitles
+				.map(title => {
+					// Handle 'Unknown user' option
+					if (title === 'Unknown user') {
+						return 'unknown';
+					}
+					const segment = segments.find(s => s.title === title);
+					return segment ? segment.sys_title : null;
+				})
+				.filter(Boolean);
+
+			// Get hide segments, but remove any that are now in show
+			const hideWithPrefix = selectedSegments
+				.filter(seg => seg.startsWith('!'))
+				.filter(seg => !newShowSysTitles.includes(seg.substring(1)));
+
+			setAttributes({ selectedSegments: [...newShowSysTitles, ...hideWithPrefix] });
 		};
+
+		const handleHideSegmentChange = (selectedTitles) => {
+			// Convert display titles back to sys_titles and prefix with '!'
+			const newHideSysTitles = selectedTitles
+				.map(title => {
+					// Handle 'Unknown user' option
+					if (title === 'Unknown user') {
+						return '!unknown';
+					}
+					const segment = segments.find(s => s.title === title);
+					return segment ? '!' + segment.sys_title : null;
+				})
+				.filter(Boolean);
+
+			// Get the sys_titles without the '!' prefix for comparison
+			const newHideSysTitlesWithoutPrefix = newHideSysTitles.map(seg => seg.substring(1));
+
+			// Get show segments, but remove any that are now in hide
+			const showWithoutPrefix = selectedSegments
+				.filter(seg => !seg.startsWith('!'))
+				.filter(seg => !newHideSysTitlesWithoutPrefix.includes(seg));
+
+			setAttributes({ selectedSegments: [...showWithoutPrefix, ...newHideSysTitles] });
+		};
+
+		// Create segment list for tooltip - each on a new line
+		const allSegmentTitles = ['Unknown user', ...segments.map(segment => segment.title)];
+		const segmentListItems = allSegmentTitles.length > 0
+			? allSegmentTitles
+			: [__('No segments available', 'arrigoo-segment-block-control-script')];
+
 		return (
 			<>
 				<BlockEdit { ...props } />
@@ -33,24 +104,78 @@ function addSegmentDisplayControls( BlockEdit ) {
 							'arrigoo-segment-block-control-script'
 						) }
 					>
-						<PanelRow>
-						{segments.map((segment) => (
-							<div key={segment.sys_title}>
-							<CheckboxControl
-								label={segment.title}
-								checked={selectedSegments?.includes(segment.sys_title)}
-								onChange={(evt) => {
-									console.log(attributes);
-									const newAttributes = {...attributes};
-									setAttributes(
-										{ ...newAttributes, 
-											selectedSegments: handleCheckboxChange(segment.sys_title, selectedSegments) 
-										});
-								}}
-							/>
-							</div>
-						))}
-						</PanelRow>
+						<div style={{ marginBottom: '12px' }}>
+							<Tooltip
+								text={
+									<div style={{ textAlign: 'left' }}>
+										<strong>{ __('Available segments:', 'arrigoo-segment-block-control-script') }</strong>
+										<div style={{ marginTop: '8px' }}>
+											{ segmentListItems.map((segment, index) => (
+												<div key={index} style={{ marginBottom: '4px' }}>
+													{ segment }
+												</div>
+											)) }
+										</div>
+									</div>
+								}
+								position="top"
+							>
+								<span style={{
+									display: 'inline-flex',
+									alignItems: 'center',
+									gap: '6px',
+									cursor: 'help',
+									color: '#2271b1',
+									fontSize: '12px',
+									padding: '4px 0'
+								}}>
+									<svg
+										width="16"
+										height="16"
+										viewBox="0 0 24 24"
+										fill="currentColor"
+										xmlns="http://www.w3.org/2000/svg"
+									>
+										<path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-6h2v6zm0-8h-2V7h2v2z"/>
+									</svg>
+									{ __('Show available segments', 'arrigoo-segment-block-control-script') }
+								</span>
+							</Tooltip>
+						</div>
+						<FormTokenField
+							label={ __(
+								'Only show to segments',
+								'arrigoo-segment-block-control-script'
+							) }
+							value={ showTitles }
+							suggestions={ availableSegmentTitles }
+							onChange={ handleShowSegmentChange }
+							placeholder={ __(
+								'Type to search segments...',
+								'arrigoo-segment-block-control-script'
+							) }
+							__experimentalShowHowTo={ false }
+						/>
+						<FormTokenField
+							label={ __(
+								'Hide from segments',
+								'arrigoo-segment-block-control-script'
+							) }
+							value={ hideTitles }
+							suggestions={ availableSegmentTitles }
+							onChange={ handleHideSegmentChange }
+							placeholder={ __(
+								'Type to search segments...',
+								'arrigoo-segment-block-control-script'
+							) }
+							__experimentalShowHowTo={ false }
+						/>
+						<p style={{ marginTop: '12px', fontSize: '12px', color: '#757575' }}>
+							{ __(
+								'If both are empty, the block is visible to everyone.',
+								'arrigoo-segment-block-control-script'
+							) }
+						</p>
 					</PanelBody>
 				</InspectorControls>
 			</>
@@ -64,27 +189,8 @@ addFilter(
 	addSegmentDisplayControls
 );
 
-const helpText = (
-	<>
-		{ __(
-			"Select the segments from the CDP that are allowed to see the block. If no segments are selected, the block will be visible to everyone.",
-			'arrigoo-segment-block-control-script'
-		) }
-		<ExternalLink
-			href={
-				'https://www.arrigoo.io/services'
-			}
-		>
-			{ __(
-				'Learn more about segments.',
-				'arrigoo-segment-block-control'
-			) }
-		</ExternalLink>
-	</>
-);
-
 /**
- * Adds a custom 'isDecorative' attribute to all Image blocks.
+ * Adds selectedSegments attribute to all blocks.
  *
  * @param {Object} settings The block settings for the registered block type.
  * @param {string} name     The block type name, including namespace.
@@ -99,7 +205,7 @@ function addCDPSegmentsAttribute( settings, name ) {
 			default: [],
 		},
 	};
-	
+
 	return settings;
 }
 
