@@ -3,7 +3,7 @@
         'name' => 'arrigoo/wp-block-control',
         'pretty_version' => 'dev-main',
         'version' => 'dev-main',
-        'reference' => '4041109f7a4c67668243da465cf17c5195c92af8',
+        'reference' => '109d154f1a5ba4c12c3852f85a0c04276b3d6998',
         'type' => 'wordpress-plugin',
         'install_path' => __DIR__ . '/../../',
         'aliases' => array(),
@@ -22,7 +22,7 @@
         'arrigoo/wp-block-control' => array(
             'pretty_version' => 'dev-main',
             'version' => 'dev-main',
-            'reference' => '4041109f7a4c67668243da465cf17c5195c92af8',
+            'reference' => '109d154f1a5ba4c12c3852f85a0c04276b3d6998',
             'type' => 'wordpress-plugin',
             'install_path' => __DIR__ . '/../../',
             'aliases' => array(),
