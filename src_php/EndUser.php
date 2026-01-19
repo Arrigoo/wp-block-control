@@ -5,6 +5,12 @@ namespace Arrigoo\WpCdpBlockControl;
 // Add the Arrigoo CDP script to frontend.
 class EndUser {
     public static function arrigoo_cdp_custom_javascript() {
+        // Check if frontend script is enabled in settings
+        $frontend_enabled = AdminSettings::get_config_value('frontend_script_enabled');
+        if (!$frontend_enabled) {
+            return;
+        }
+
         wp_enqueue_script(
             'arrigoo_cdp',
             plugin_dir_url( __FILE__ ) . '../build/bundle.js',

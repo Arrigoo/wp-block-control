@@ -33,6 +33,7 @@ class AdminSettings {
                     'api_url' => '',
                     'api_user' => '',
                     'api_secret' => '',
+                    'frontend_script_enabled' => true,
                 ]
             ]
         );
@@ -67,6 +68,14 @@ class AdminSettings {
             'arrigoo-cdp-settings',
             'arrigoo_cdp_main_section'
         );
+
+        add_settings_field(
+            'frontend_script_enabled',
+            'Enable Frontend Script',
+            [self::class, 'render_frontend_script_enabled_field'],
+            'arrigoo-cdp-settings',
+            'arrigoo_cdp_main_section'
+        );
     }
 
     /**
@@ -77,6 +86,7 @@ class AdminSettings {
         $sanitized['api_url'] = isset($input['api_url']) ? esc_url_raw(trim($input['api_url'])) : '';
         $sanitized['api_user'] = isset($input['api_user']) ? sanitize_text_field($input['api_user']) : '';
         $sanitized['api_secret'] = isset($input['api_secret']) ? sanitize_text_field($input['api_secret']) : '';
+        $sanitized['frontend_script_enabled'] = isset($input['frontend_script_enabled']) ? (bool) $input['frontend_script_enabled'] : false;
 
         // Clear the segments cache when settings are updated
         delete_option('ARRIGOO_CDP');
@@ -88,18 +98,26 @@ class AdminSettings {
      * Get a specific configuration value with fallback to env vars and constants.
      */
     public static function get_config_value($key) {
-        $options = get_option(self::OPTION_NAME, [
+        $defaults = [
             'api_url' => '',
             'api_user' => '',
             'api_secret' => '',
-        ]);
+            'frontend_script_enabled' => true,
+        ];
 
-        // Map keys to their env var and constant names
+        $options = get_option(self::OPTION_NAME, $defaults);
+
+        // Map keys to their env var and constant names (only for API settings)
         $mapping = [
             'api_url' => ['env' => 'CDP_API_URL', 'constant' => 'CDP_API_URL'],
             'api_user' => ['env' => 'CDP_USER', 'constant' => 'CDP_USER'],
             'api_secret' => ['env' => 'CDP_API_KEY', 'constant' => 'CDP_API_KEY'],
         ];
+
+        // For boolean settings, return the value directly if it exists
+        if ($key === 'frontend_script_enabled') {
+            return isset($options[$key]) ? (bool) $options[$key] : $defaults[$key];
+        }
 
         // First, check if value exists in settings and is not empty
         if (isset($options[$key]) && !empty($options[$key])) {
@@ -120,7 +138,7 @@ class AdminSettings {
             }
         }
 
-        return '';
+        return $defaults[$key] ?? '';
     }
 
     /**
@@ -244,6 +262,25 @@ class AdminSettings {
                value="<?php echo esc_attr($value); ?>"
                class="regular-text">
         <p class="description">Your CDP API secret key.</p>
+        <?php
+    }
+
+    /**
+     * Render Frontend Script Enabled field.
+     */
+    public static function render_frontend_script_enabled_field() {
+        $options = get_option(self::OPTION_NAME, ['frontend_script_enabled' => true]);
+        $checked = isset($options['frontend_script_enabled']) ? (bool) $options['frontend_script_enabled'] : true;
+        ?>
+        <label>
+            <input type="checkbox"
+                   id="frontend_script_enabled"
+                   name="<?php echo esc_attr(self::OPTION_NAME); ?>[frontend_script_enabled]"
+                   value="1"
+                   <?php checked($checked, true); ?>>
+            Automatically load the segment visibility script on the frontend
+        </label>
+        <p class="description">When enabled, the plugin will automatically inject the JavaScript that controls block visibility based on user segments. Disable this if you want to handle the script loading manually.</p>
         <?php
     }
 }
