@@ -55,25 +55,26 @@ class BlockControl {
     public static function arrigoo_cdp_get_segments() {
         $cached_segments = get_option('ARRIGOO_CDP');
         $now = time();
-        if ($cached_segments && isset($cached_segments['expire']) && ($now > $cached_segments['expire'])) {
+        if ($cached_segments && isset($cached_segments['expire']) && ($now < $cached_segments['expire'])) {
             return $cached_segments['segments'];
         }
-        $apiUrl = getenv('CDP_API_URL');
-        $apiKey = getenv('CDP_API_KEY');
-        $cdpUser = getenv('CDP_USER');
-        $apiUrl = $apiUrl ?: CDP_API_URL;
-        $apiKey = $apiKey ?: CDP_API_KEY;
-        $cdpUser = $cdpUser ?: CDP_USER;
+
+        // Get configuration values with fallback order: settings -> env vars -> constants
+        $apiUrl = AdminSettings::get_config_value('api_url');
+        $cdpUser = AdminSettings::get_config_value('api_user');
+        $apiKey = AdminSettings::get_config_value('api_secret');
+
         if (!$apiUrl || !$apiKey || !$cdpUser) {
             return [];
         }
+
         $client = CdpClient::create($apiUrl, $cdpUser, $apiKey);
         $segments = $client->getSegments();
         $segment_cache = [
             'segments' => $segments,
             'expire' => $now + self::CACHE_EXPIRE,
         ];
-        update_option('ARRIGOO_CDP', $segments);
+        update_option('ARRIGOO_CDP', $segment_cache);
         return $segments;
     }
 }
