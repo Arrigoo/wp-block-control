@@ -7,16 +7,14 @@ class EndUser {
     public static function arrigoo_cdp_custom_javascript() {
         // Check if frontend script is enabled in settings
         $frontend_enabled = AdminSettings::get_config_value('frontend_script_enabled');
-        if (!$frontend_enabled) {
-            return;
+        // If frontend is not enabled, the script relies on tag manager or similar to be loaded.
+        if ($frontend_enabled) {
+            wp_enqueue_script(
+                'arrigoo_cdp',
+                plugin_dir_url( __FILE__ ) . '../build/bundle.js',
+              //  array(), '1.0.0', true
+              );
         }
-
-        wp_enqueue_script(
-            'arrigoo_cdp',
-            plugin_dir_url( __FILE__ ) . '../build/bundle.js',
-          //  array(), '1.0.0', true
-          );
-
         // Get API URL with fallback order: settings -> env vars -> constants
         $apiUrl = AdminSettings::get_config_value('api_url');
         ?>
