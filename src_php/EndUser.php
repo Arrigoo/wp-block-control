@@ -2,66 +2,49 @@
 
 namespace Arrigoo\WpCdpBlockControl;
 
-// Add the Arrigoo CDP script to frontend.
+/**
+ * Handles frontend script loading and block visibility.
+ */
 class EndUser {
+    /**
+     * Enqueue frontend scripts and output configuration.
+     */
     public static function arrigoo_cdp_custom_javascript() {
-        wp_enqueue_script(
-            'arrigoo_cdp',
-            plugin_dir_url( __FILE__ ) . '../build/bundle.js',
-          //  array(), '1.0.0', true
-          );
-
-        // Get API URL with fallback order: settings -> env vars -> constants
+        // Get settings
+        $consent_provider = AdminSettings::get_config_value('cookie_consent_provider');
+        $consent_category = AdminSettings::get_config_value('cookie_consent_category');
+        $frontend_script_enabled = AdminSettings::get_config_value('frontend_script_enabled');
         $apiUrl = AdminSettings::get_config_value('api_url');
-        ?>
-            <style>
-                *[data-segments] {
-                    display: none;
-                }
-            </style>
-            <script type="text/javascript">
-                window.arrigooHost = '<?= esc_js($apiUrl) ?>';
-                window.document.addEventListener('ao_loaded', (evt) => {
-                    const storage = window.argo;
-                    const userData = storage.get('ident');
-                    window.argo.sendInitEvent();
-                    var user_segments = argo.get("s");
-                    var blocks = document.querySelectorAll('[data-segments]');
-                    var unknownUser = !user_segments || user_segments.length === 0;
-                    blocks.forEach(function(block) {
-                        var allSegments = block.getAttribute('data-segments').split(' ') || [];
-                        var hideSegments = allSegments.filter(s => s.startsWith('!')).map(s => s.substring(1));
-                        var blockSegments = allSegments.filter(s => !s.startsWith('!'));
-                        var showBlock = false;
-                        blockSegments.forEach(function(segment) {
-                            if ((unknownUser || !user_segments) && segment === 'unknown') {
-                                showBlock = true;
-                                return;
-                            }
-                            if (user_segments && user_segments.indexOf(segment) !== -1) {
-                                showBlock = true;
-                            }
-                        });
-                        showBlock = showBlock || blockSegments.length === 0;
-                        for (var i = 0; i < hideSegments.length; i++) {
-                            if ((unknownUser || !user_segments) && hideSegments[i] === 'unknown') {
-                                showBlock = false;
-                                return;
-                            }
-                            if (user_segments && user_segments.indexOf(hideSegments[i]) !== -1) {
-                                showBlock = false;
-                                break;
-                            }
 
-                        }
-                        if (showBlock) {
-                            block.style.display = 'block';
-                            return;
-                        }
-                        block.remove();
-                    });
-                }, false);
-            </script>
+        // Build URLs
+        $bundleUrl = plugin_dir_url(__FILE__) . '../build/bundle.js';
+        $loaderUrl = plugin_dir_url(__FILE__) . '../build/frontend-loader.js';
+
+        // Enqueue the frontend loader script
+        wp_enqueue_script(
+            'arrigoo-frontend-loader',
+            $loaderUrl,
+            [],
+            filemtime(plugin_dir_path(__FILE__) . '../build/frontend-loader.js'),
+            false // Load in head, not footer
+        );
+
+        // Output inline configuration and styles
+        ?>
+        <style>
+            *[data-segments] {
+                display: none;
+            }
+        </style>
+        <script type="text/javascript">
+            window.arrigooHost = '<?= esc_js($apiUrl) ?>';
+            window.arrigooConfig = {
+                consentProvider: '<?= esc_js($consent_provider) ?>',
+                consentCategory: '<?= esc_js($consent_category) ?>',
+                frontendScriptEnabled: <?= $frontend_script_enabled ? 'true' : 'false' ?>,
+                bundleUrl: '<?= esc_js($bundleUrl) ?>'
+            };
+        </script>
         <?php
     }
 }
