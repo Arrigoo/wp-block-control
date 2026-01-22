@@ -33,6 +33,8 @@ class AdminSettings {
                     'api_url' => '',
                     'api_user' => '',
                     'api_secret' => '',
+                    'cookie_consent_provider' => 'none',
+                    'cookie_consent_category' => 'functional',
                     'frontend_script_enabled' => true,
                 ]
             ]
@@ -70,9 +72,17 @@ class AdminSettings {
         );
 
         add_settings_field(
-            'frontend_script_enabled',
-            'Enable Frontend Script',
-            [self::class, 'render_frontend_script_enabled_field'],
+            'cookie_consent_provider',
+            'Cookie Consent Provider',
+            [self::class, 'render_cookie_consent_provider_field'],
+            'arrigoo-cdp-settings',
+            'arrigoo_cdp_main_section'
+        );
+
+        add_settings_field(
+            'cookie_consent_category',
+            'Cookie Consent Category',
+            [self::class, 'render_cookie_consent_category_field'],
             'arrigoo-cdp-settings',
             'arrigoo_cdp_main_section'
         );
@@ -86,6 +96,18 @@ class AdminSettings {
         $sanitized['api_url'] = isset($input['api_url']) ? esc_url_raw(trim($input['api_url'])) : '';
         $sanitized['api_user'] = isset($input['api_user']) ? sanitize_text_field($input['api_user']) : '';
         $sanitized['api_secret'] = isset($input['api_secret']) ? sanitize_text_field($input['api_secret']) : '';
+
+        // Cookie consent settings
+        $valid_providers = array_keys(self::get_cookie_consent_providers());
+        $sanitized['cookie_consent_provider'] = isset($input['cookie_consent_provider']) && in_array($input['cookie_consent_provider'], $valid_providers, true)
+            ? $input['cookie_consent_provider']
+            : 'none';
+
+        $valid_categories = ['necessary', 'functional', 'statistic', 'marketing'];
+        $sanitized['cookie_consent_category'] = isset($input['cookie_consent_category']) && in_array($input['cookie_consent_category'], $valid_categories, true)
+            ? $input['cookie_consent_category']
+            : 'functional';
+
         $sanitized['frontend_script_enabled'] = isset($input['frontend_script_enabled']) ? (bool) $input['frontend_script_enabled'] : false;
 
         // Clear the segments cache when settings are updated
@@ -102,6 +124,8 @@ class AdminSettings {
             'api_url' => '',
             'api_user' => '',
             'api_secret' => '',
+            'cookie_consent_provider' => 'none',
+            'cookie_consent_category' => 'functional',
             'frontend_script_enabled' => true,
         ];
 
@@ -114,9 +138,10 @@ class AdminSettings {
             'api_secret' => ['env' => 'CDP_API_KEY', 'constant' => 'CDP_API_KEY'],
         ];
 
-        // For boolean settings, return the value directly if it exists
+        // Handle boolean settings specially (empty() returns true for false)
         if ($key === 'frontend_script_enabled') {
-            return isset($options[$key]) ? (bool) $options[$key] : $defaults[$key];
+            // array_key_exists handles the case where the value is explicitly false
+            return array_key_exists($key, $options) ? (bool) $options[$key] : $defaults[$key];
         }
 
         // First, check if value exists in settings and is not empty
@@ -266,21 +291,110 @@ class AdminSettings {
     }
 
     /**
-     * Render Frontend Script Enabled field.
+     * Get available cookie consent providers.
      */
-    public static function render_frontend_script_enabled_field() {
-        $options = get_option(self::OPTION_NAME, ['frontend_script_enabled' => true]);
-        $checked = isset($options['frontend_script_enabled']) ? (bool) $options['frontend_script_enabled'] : true;
+    public static function get_cookie_consent_providers() {
+        return [
+            'none' => [
+                'label' => 'None (always load script)',
+                'description' => 'The frontend script will always be loaded without waiting for cookie consent.',
+            ],
+            'cookieinformation' => [
+                'label' => 'CookieInformation.com',
+                'description' => 'Wait for consent via CookieInformation cookie banner.',
+            ],
+        ];
+    }
+
+    /**
+     * Get available cookie consent categories.
+     */
+    public static function get_cookie_consent_categories() {
+        return [
+            'necessary' => 'Necessary',
+            'functional' => 'Functional',
+            'statistic' => 'Statistic',
+            'marketing' => 'Marketing',
+        ];
+    }
+
+    /**
+     * Render Cookie Consent Provider field.
+     */
+    public static function render_cookie_consent_provider_field() {
+        $options = get_option(self::OPTION_NAME, ['cookie_consent_provider' => 'none']);
+        $current = isset($options['cookie_consent_provider']) ? $options['cookie_consent_provider'] : 'none';
+        $providers = self::get_cookie_consent_providers();
         ?>
-        <label>
-            <input type="checkbox"
-                   id="frontend_script_enabled"
-                   name="<?php echo esc_attr(self::OPTION_NAME); ?>[frontend_script_enabled]"
-                   value="1"
-                   <?php checked($checked, true); ?>>
-            Automatically load the segment visibility script on the frontend
-        </label>
-        <p class="description">When enabled, the plugin will automatically inject the JavaScript that controls block visibility based on user segments. Disable this if you want to handle the script loading manually.</p>
+        <select id="cookie_consent_provider"
+                name="<?php echo esc_attr(self::OPTION_NAME); ?>[cookie_consent_provider]"
+                class="regular-text">
+            <?php foreach ($providers as $value => $provider): ?>
+                <option value="<?php echo esc_attr($value); ?>" <?php selected($current, $value); ?>>
+                    <?php echo esc_html($provider['label']); ?>
+                </option>
+            <?php endforeach; ?>
+        </select>
+        <p class="description">Select your cookie consent provider. The frontend script will only load after the user has given consent for the selected category.</p>
+        <?php
+    }
+
+    /**
+     * Render Cookie Consent Category field.
+     */
+    public static function render_cookie_consent_category_field() {
+        $options = get_option(self::OPTION_NAME, [
+            'cookie_consent_provider' => 'none',
+            'cookie_consent_category' => 'functional',
+            'frontend_script_enabled' => true,
+        ]);
+        $current_provider = isset($options['cookie_consent_provider']) ? $options['cookie_consent_provider'] : 'none';
+        $current_category = isset($options['cookie_consent_category']) ? $options['cookie_consent_category'] : 'functional';
+        $frontend_enabled = isset($options['frontend_script_enabled']) ? (bool) $options['frontend_script_enabled'] : true;
+        $categories = self::get_cookie_consent_categories();
+        ?>
+        <fieldset id="cookie_consent_category_fieldset" <?php echo $current_provider === 'none' ? 'style="display:none;"' : ''; ?>>
+            <?php foreach ($categories as $value => $label): ?>
+                <label style="display: block; margin-bottom: 5px;">
+                    <input type="radio"
+                           name="<?php echo esc_attr(self::OPTION_NAME); ?>[cookie_consent_category]"
+                           value="<?php echo esc_attr($value); ?>"
+                           <?php checked($current_category, $value); ?>>
+                    <?php echo esc_html($label); ?>
+                </label>
+            <?php endforeach; ?>
+            <p class="description">Select which consent category is required before loading the frontend script.</p>
+        </fieldset>
+        <div id="frontend_script_enabled_container" <?php echo $current_provider !== 'none' ? 'style="display:none;"' : ''; ?>>
+            <label>
+                <input type="checkbox"
+                       id="frontend_script_enabled"
+                       name="<?php echo esc_attr(self::OPTION_NAME); ?>[frontend_script_enabled]"
+                       value="1"
+                       <?php checked($frontend_enabled, true); ?>>
+                Enable frontend script
+            </label>
+            <p class="description">When enabled, the plugin will automatically load the segment visibility script on the frontend. Disable this if you want to handle the script loading manually (e.g., via a tag manager).</p>
+        </div>
+        <script type="text/javascript">
+            (function() {
+                var providerSelect = document.getElementById('cookie_consent_provider');
+                var categoryFieldset = document.getElementById('cookie_consent_category_fieldset');
+                var frontendScriptContainer = document.getElementById('frontend_script_enabled_container');
+
+                if (providerSelect && categoryFieldset && frontendScriptContainer) {
+                    providerSelect.addEventListener('change', function() {
+                        if (this.value === 'none') {
+                            categoryFieldset.style.display = 'none';
+                            frontendScriptContainer.style.display = 'block';
+                        } else {
+                            categoryFieldset.style.display = 'block';
+                            frontendScriptContainer.style.display = 'none';
+                        }
+                    });
+                }
+            })();
+        </script>
         <?php
     }
 }
