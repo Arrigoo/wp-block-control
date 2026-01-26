@@ -88,13 +88,15 @@
         }
     }
 
-    // Set up ao_loaded event listener for when CDP script loads
-    window.document.addEventListener('ao_loaded', function() {
-        if (window.argo) {
-            window.argo.sendInitEvent();
-        }
-        processBlocks();
-    }, false);
+    function initScript() {
+        // Set up ao_loaded event listener for when CDP script loads
+        window.document.addEventListener('ao_loaded', function() {
+            if (window.argo) {
+                window.argo.sendInitEvent();
+            }
+            processBlocks();
+        }, false);
+    }
 
     /**
      * Cookie consent handlers by provider
@@ -106,6 +108,7 @@
         none: function() {
             if (config.frontendScriptEnabled) {
                 loadArrigooScript();
+                initScript();
             } else {
                 onDomReady(processBlocks);
             }
@@ -135,6 +138,7 @@
             window.addEventListener('CookieInformationConsentGiven', function() {
                 if (hasRequiredConsent()) {
                     loadArrigooScript();
+                    initScript();
                 } else {
                     onDomReady(processBlocks);
                 }
@@ -143,6 +147,7 @@
             // Check if consent was already given (e.g., returning visitor)
             if (hasRequiredConsent()) {
                 loadArrigooScript();
+                initScript();
             }
         }
     };
