@@ -8,4 +8,4 @@
         "@babel/runtime": "^7.28.6",
         "@wordpress/scripts": "^28.5.0"
     }
-  }
+}

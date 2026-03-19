@@ -1,7 +1,7 @@
 import { addFilter } from '@wordpress/hooks';
 import { __ } from '@wordpress/i18n';
 import { InspectorControls } from '@wordpress/block-editor';
-import { ExternalLink, PanelBody, FormTokenField, Tooltip } from '@wordpress/components';
+import { PanelBody, FormTokenField, Tooltip } from '@wordpress/components';
 
 function addSegmentDisplayControls( BlockEdit ) {
 
@@ -118,7 +118,7 @@ function addSegmentDisplayControls( BlockEdit ) {
 										</div>
 									</div>
 								}
-								position="top"
+								placement="top"
 							>
 								<span style={{
 									display: 'inline-flex',
@@ -223,13 +223,13 @@ addFilter(
  * @param {Object} attributes  The block's attributes.
  * @return {Object}            The modified properties with the `role` attribute added, or the original properties if conditions are not met.
  */
-function addSegmentDisplayBlocks( props, blockType, attributes ) {
-	const { name } = blockType;
+function addSegmentDisplayBlocks( props, attributes ) {
 	const { selectedSegments } = attributes;
 
 	if ( selectedSegments && selectedSegments.length > 0 ) {
 		const classes = props.class || [];
 		classes.push( 'arrigoo-segment-block' );
+
 		return {
 			...props,
 			'data-segments': selectedSegments.join( ' ' ),
@@ -244,4 +244,35 @@ addFilter(
 	'blocks.getSaveContent.extraProps',
 	'arrigoo-cdp/arrigoo-segment-block-control-filter',
 	addSegmentDisplayBlocks
+);
+
+/**
+ * Add segment-specific classes to blocks in the editor.
+ *
+ * @param {Function} BlockListBlock The original BlockListBlock component.
+ * @return {Function} The wrapped BlockListBlock component with segment classes.
+ */
+function addSegmentClassInEditor( BlockListBlock ) {
+	return ( props ) => {
+		const { attributes } = props;
+		const { selectedSegments } = attributes;
+
+		if ( selectedSegments && selectedSegments.length > 0 ) {
+			const segmentClasses = selectedSegments.map( segment => `segment-${segment}` ).join( ' ' );
+			return (
+				<BlockListBlock
+					{ ...props }
+					className={ segmentClasses }
+				/>
+			);
+		}
+
+		return <BlockListBlock { ...props } />;
+	};
+}
+
+addFilter(
+	'editor.BlockListBlock',
+	'arrigoo-cdp/add-segment-class-in-editor',
+	addSegmentClassInEditor
 );

@@ -49,8 +49,28 @@ class BlockControl {
         return $args;
     }
 
+	/**
+	 * Add segment data attributes to dynamic blocks during render.
+	 */
+	public static function arrigoo_add_segment_attributes_to_dynamic_blocks( $block_content, $block ) {
+		if ( empty( $block['attrs']['selectedSegments'] ) ) {
+			return $block_content;
+		}
+
+		$segments  = esc_attr( implode( ' ', $block['attrs']['selectedSegments'] ) );
+		$processor = new \WP_HTML_Tag_Processor( $block_content );
+
+		if ( $processor->next_tag() ) {
+			$processor->set_attribute( 'data-segments', $segments );
+			$processor->add_class( 'arrigoo-segment-block' );
+			return $processor->get_updated_html();
+		}
+
+		return $block_content;
+	}
+
     /**
-     * Instanitate the CDP client and request segments for use in admin.
+     * Instantiate the CDP client and request segments for use in admin.
      */
     public static function arrigoo_cdp_get_segments() {
         $cached_segments = get_option('ARRIGOO_CDP');
