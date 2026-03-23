@@ -7,5 +7,9 @@
     "devDependencies": {
         "@babel/runtime": "^7.28.6",
         "@wordpress/scripts": "^28.5.0"
+    },
+    "dependencies": {
+        "baseline-browser-mapping": "^2.10.10",
+        "caniuse-lite": "^1.0.30001781"
     }
 }

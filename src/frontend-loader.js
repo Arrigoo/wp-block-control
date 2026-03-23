@@ -160,6 +160,42 @@
                 loadArrigooScript();
                 initScript();
             }
+        },
+
+        /**
+         * Cookiebot consent handler
+         */
+        cookiebot: function() {
+            var categoryMap = {
+                'necessary': 'necessary',
+                'functional': 'preferences',
+                'statistic': 'statistics',
+                'marketing': 'marketing'
+            };
+
+            function hasRequiredConsent() {
+                if (typeof Cookiebot !== 'undefined' && Cookiebot.consent) {
+                    var categoryKey = categoryMap[config.consentCategory];
+                    return Cookiebot.consent[categoryKey] === true;
+                }
+                return false;
+            }
+
+            // Listen for consent event
+            window.addEventListener('CookiebotOnConsentReady', function() {
+                if (hasRequiredConsent()) {
+                    loadArrigooScript();
+                    initScript();
+                } else {
+                    onDomReady(processBlocks);
+                }
+            });
+
+            // Check if consent was already given (e.g., returning visitor)
+            if (hasRequiredConsent()) {
+                loadArrigooScript();
+                initScript();
+            }
         }
     };
 

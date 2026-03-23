@@ -3,7 +3,7 @@
 namespace Arrigoo\WpCdpBlockControl;
 
 use Arrigoo\ArrigooCdpSdk\Client as CdpClient;
-
+use GuzzleHttp\Exception\GuzzleException;
 
 class BlockControl {
     const CACHE_EXPIRE = 300;
@@ -87,14 +87,17 @@ class BlockControl {
         if (!$apiUrl || !$apiKey || !$cdpUser) {
             return [];
         }
-
-        $client = CdpClient::create($apiUrl, $cdpUser, $apiKey);
-        $segments = $client->getSegments();
-        $segment_cache = [
-            'segments' => $segments,
-            'expire' => $now + self::CACHE_EXPIRE,
-        ];
-        update_option('ARRIGOO_CDP', $segment_cache);
-        return $segments;
+        try {
+            $client = CdpClient::create($apiUrl, $cdpUser, $apiKey);
+            $segments = $client->getSegments();
+            $segment_cache = [
+                'segments' => $segments,
+                'expire' => $now + self::CACHE_EXPIRE,
+            ];
+            update_option('ARRIGOO_CDP', $segment_cache);
+            return $segments;
+        } catch (GuzzleException $e) {
+            return [];
+        }
     }
 }
