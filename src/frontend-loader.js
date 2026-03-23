@@ -33,8 +33,8 @@
      * Process blocks based on user segments
      */
     function processBlocks() {
-        if (blocksProcessed) return;
-        blocksProcessed = true;
+        // if (blocksProcessed) return;
+        // blocksProcessed = true;
 
         var user_segments = window.argo ? window.argo.get('s') : null;
         if (!user_segments) {
