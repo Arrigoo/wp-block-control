@@ -303,6 +303,10 @@ class AdminSettings {
                 'label' => 'CookieInformation.com',
                 'description' => 'Wait for consent via CookieInformation cookie banner.',
             ],
+            'cookiebot' => [
+                'label' => 'Cookie Bot',
+                'description' => 'Wait for consent via Cookie Bot banner.',
+            ],
         ];
     }
 
