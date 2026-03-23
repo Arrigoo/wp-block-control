@@ -37,6 +37,12 @@
         blocksProcessed = true;
 
         var user_segments = window.argo ? window.argo.get('s') : null;
+        if (!user_segments) {
+            try {
+                var profile = JSON.parse(atob(sessionStorage.getItem('arrigoocdp')));
+                if (profile) user_segments = profile.s;
+            } catch (e) {}
+        }
         var blocks = document.querySelectorAll('[data-segments]');
         var unknownUser = !user_segments || user_segments.length === 0;
 
@@ -110,7 +116,12 @@
                 loadArrigooScript();
                 initScript();
             } else {
-                onDomReady(processBlocks);
+                let arrigooLoaded = false;
+                window.document.addEventListener('ao_loaded', function() {
+                    arrigooLoaded = true;
+                    processBlocks();
+                }, false);
+                onDomReady(() => { setTimeout(() => { if (!arrigooLoaded) processBlocks(); }, 300) });
             }
         },
 
@@ -136,6 +147,42 @@
 
             // Listen for consent event
             window.addEventListener('CookieInformationConsentGiven', function() {
+                if (hasRequiredConsent()) {
+                    loadArrigooScript();
+                    initScript();
+                } else {
+                    onDomReady(processBlocks);
+                }
+            });
+
+            // Check if consent was already given (e.g., returning visitor)
+            if (hasRequiredConsent()) {
+                loadArrigooScript();
+                initScript();
+            }
+        },
+
+        /**
+         * Cookiebot consent handler
+         */
+        cookiebot: function() {
+            var categoryMap = {
+                'necessary': 'necessary',
+                'functional': 'preferences',
+                'statistic': 'statistics',
+                'marketing': 'marketing'
+            };
+
+            function hasRequiredConsent() {
+                if (typeof Cookiebot !== 'undefined' && Cookiebot.consent) {
+                    var categoryKey = categoryMap[config.consentCategory];
+                    return Cookiebot.consent[categoryKey] === true;
+                }
+                return false;
+            }
+
+            // Listen for consent event
+            window.addEventListener('CookiebotOnConsentReady', function() {
                 if (hasRequiredConsent()) {
                     loadArrigooScript();
                     initScript();
