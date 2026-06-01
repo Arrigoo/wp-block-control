@@ -16,10 +16,11 @@ final class StreamWrapper
     /** @var resource */
     public $context;
 
-    private StreamInterface $stream;
+    /** @var StreamInterface */
+    private $stream;
 
     /** @var string r, r+, or w */
-    private string $mode;
+    private $mode;
 
     /**
      * Returns a resource representing the stream.

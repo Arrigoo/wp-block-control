@@ -4,21 +4,16 @@ declare(strict_types=1);
 
 namespace GuzzleHttp\Psr7;
 
-use GuzzleHttp\Psr7\Exception\TimeoutException;
 use Psr\Http\Message\RequestInterface;
 use Psr\Http\Message\StreamInterface;
 use Psr\Http\Message\UriInterface;
 
 final class Utils
 {
-    private function __construct()
-    {
-    }
-
     /**
      * Remove the items given by the keys, case insensitively from the data.
      *
-     * @param array<array-key, string|int> $keys
+     * @param (string|int)[] $keys
      */
     public static function caselessRemove(array $keys, array $data): array
     {
@@ -41,6 +36,11 @@ final class Utils
      * Copy the contents of a stream into another stream until the given number
      * of bytes have been read.
      *
+     * The copy stops if the destination write returns 0, for example a
+     * BufferStream at its high water mark or a full DroppingStream. For a
+     * guaranteed full copy use a normal writable stream such as a file or
+     * php://temp stream.
+     *
      * @param StreamInterface $source Stream to read from
      * @param StreamInterface $dest   Stream to write to
      * @param int             $maxLen Maximum number of bytes to read. Pass -1
@@ -54,51 +54,51 @@ final class Utils
 
         if ($maxLen === -1) {
             while (!$source->eof()) {
-                $buf = self::read($source, $bufferSize, 'Unable to read from stream: timed out');
+                $buf = $source->read($bufferSize);
                 if ($buf === '') {
                     break;
                 }
 
-                self::writeAll($dest, $buf);
+                if (!self::writeAll($dest, $buf)) {
+                    break;
+                }
             }
         } else {
             $remaining = $maxLen;
             while ($remaining > 0 && !$source->eof()) {
-                $buf = self::read($source, min($bufferSize, $remaining), 'Unable to read from stream: timed out');
+                $buf = $source->read(min($bufferSize, $remaining));
                 $len = strlen($buf);
                 if (!$len) {
                     break;
                 }
                 $remaining -= $len;
-                self::writeAll($dest, $buf);
+                if (!self::writeAll($dest, $buf)) {
+                    break;
+                }
             }
         }
     }
 
-    private static function writeAll(StreamInterface $dest, string $buf): void
+    /**
+     * Writes the full buffer to the destination, retrying short writes.
+     *
+     * Returns false when the destination write returns 0 or less.
+     */
+    private static function writeAll(StreamInterface $dest, string $buf): bool
     {
         $written = 0;
         $len = strlen($buf);
 
         while ($written < $len) {
-            try {
-                $result = $dest->write(substr($buf, $written));
-            } catch (TimeoutException $e) {
-                throw $e;
-            } catch (\RuntimeException $e) {
-                self::throwIfWriteTimedOut($dest, $e);
-
-                throw $e;
-            }
-
+            $result = $dest->write(substr($buf, $written));
             if ($result <= 0) {
-                self::throwIfWriteTimedOut($dest);
-
-                throw new \RuntimeException('Unable to write to stream');
+                return false;
             }
 
             $written += $result;
         }
+
+        return true;
     }
 
     /**
@@ -117,7 +117,7 @@ final class Utils
 
         if ($maxLen === -1) {
             while (!$stream->eof()) {
-                $buf = self::read($stream, 1048576, 'Unable to read from stream: timed out');
+                $buf = $stream->read(1048576);
                 if ($buf === '') {
                     break;
                 }
@@ -129,7 +129,7 @@ final class Utils
 
         $len = 0;
         while (!$stream->eof() && $len < $maxLen) {
-            $buf = self::read($stream, $maxLen - $len, 'Unable to read from stream: timed out');
+            $buf = $stream->read($maxLen - $len);
             if ($buf === '') {
                 break;
             }
@@ -162,12 +162,7 @@ final class Utils
 
         $ctx = hash_init($algo);
         while (!$stream->eof()) {
-            $buf = self::read($stream, 1048576, 'Unable to calculate stream hash: timed out');
-            if ($buf === '') {
-                break;
-            }
-
-            hash_update($ctx, $buf);
+            hash_update($ctx, $stream->read(1048576));
         }
 
         $out = hash_final($ctx, $rawOutput);
@@ -190,22 +185,14 @@ final class Utils
      *   strings or integers.
      * - body: (mixed) Sets the given body. Present non-null values are converted
      *   with self::streamFor(), including scalar values, resources, streams,
-     *   iterators, callable arrays, closures, invokable objects, and stringable
-     *   objects. String inputs remain literal bodies.
+     *   iterators, callable arrays, closures, invokable objects, and objects
+     *   with __toString(). String inputs remain literal bodies.
      * - uri: (UriInterface) Set the URI.
      * - query: (string) Set the query string value of the URI.
      * - version: (string) Set the protocol version.
      *
      * @param RequestInterface $request Request to clone and modify.
-     * @param array{
-     *     method?: string,
-     *     set_headers?: array<array-key, string|non-empty-array<array-key, string>>,
-     *     remove_headers?: array<array-key, string|int>,
-     *     body?: resource|string|int|float|bool|StreamInterface|callable|\Iterator|\Stringable,
-     *     uri?: UriInterface,
-     *     query?: string,
-     *     version?: string
-     * } $changes Changes to apply.
+     * @param array            $changes Changes to apply.
      */
     public static function modifyRequest(RequestInterface $request, array $changes): RequestInterface
     {
@@ -213,20 +200,16 @@ final class Utils
             return $request;
         }
 
-        self::assertValidModifyRequestChanges($changes);
+        self::warnOnInvalidModifyRequestChanges($changes);
 
         $headers = $request->getHeaders();
 
         if (!isset($changes['uri'])) {
             $uri = $request->getUri();
         } else {
-            /** @var UriInterface */
-            $uri = $changes['uri'];
-
-            $host = $uri->getHost();
+            // Remove the host header if one is on the URI
+            $host = $changes['uri']->getHost();
             if ($host !== '') {
-                Uri::assertValidHost($host);
-
                 if (isset($changes['set_headers']) && is_array($changes['set_headers'])) {
                     foreach (array_keys($changes['set_headers']) as $header) {
                         if (strtolower((string) $header) === 'host') {
@@ -239,14 +222,15 @@ final class Utils
 
                 $changes['set_headers']['Host'] = $host;
 
-                if ($port = $uri->getPort()) {
+                if ($port = $changes['uri']->getPort()) {
                     $standardPorts = ['http' => 80, 'https' => 443];
-                    $scheme = $uri->getScheme();
+                    $scheme = $changes['uri']->getScheme();
                     if (isset($standardPorts[$scheme]) && $port != $standardPorts[$scheme]) {
                         $changes['set_headers']['Host'] .= ':'.$port;
                     }
                 }
             }
+            $uri = $changes['uri'];
         }
 
         if (!empty($changes['remove_headers'])) {
@@ -329,45 +313,45 @@ final class Utils
     /**
      * @param array<array-key, mixed> $changes
      */
-    private static function assertValidModifyRequestChanges(array $changes): void
+    private static function warnOnInvalidModifyRequestChanges(array $changes): void
     {
         foreach (['method', 'query', 'version'] as $key) {
             if (\array_key_exists($key, $changes) && !\is_string($changes[$key])) {
-                self::assertValidModifyRequestChange($key, 'string', $changes[$key]);
+                self::warnOnInvalidModifyRequestChange($key, 'string', $changes[$key]);
             }
         }
 
         if (\array_key_exists('uri', $changes) && !$changes['uri'] instanceof UriInterface) {
-            self::assertValidModifyRequestChange('uri', 'UriInterface', $changes['uri']);
+            self::warnOnInvalidModifyRequestChange('uri', 'UriInterface', $changes['uri']);
         }
 
         if (\array_key_exists('body', $changes) && $changes['body'] === null) {
-            self::assertValidModifyRequestChange('body', 'resource|string|int|float|bool|StreamInterface|callable|\Iterator|\Stringable', $changes['body']);
+            self::warnOnInvalidModifyRequestChange('body', 'resource|string|int|float|bool|StreamInterface|callable|\Iterator|\Stringable', $changes['body']);
         }
 
         if (\array_key_exists('set_headers', $changes)) {
             if (!\is_array($changes['set_headers'])) {
-                self::assertValidModifyRequestChange('set_headers', 'array<array-key, string|non-empty-array<array-key, string>>', $changes['set_headers']);
+                self::warnOnInvalidModifyRequestChange('set_headers', 'array<array-key, string|non-empty-array<array-key, string>>', $changes['set_headers']);
             } else {
                 foreach ($changes['set_headers'] as $header => $value) {
                     $headerPath = \sprintf('set_headers.%s', (string) $header);
 
                     if (\is_array($value)) {
                         if ($value === []) {
-                            self::assertValidModifyRequestChange($headerPath, 'string|non-empty-array<array-key, string>', $value);
+                            self::warnOnInvalidModifyRequestChange($headerPath, 'string|non-empty-array<array-key, string>', $value);
 
                             break;
                         }
 
                         foreach ($value as $index => $item) {
                             if (!\is_string($item)) {
-                                self::assertValidModifyRequestChange(\sprintf('%s.%s', $headerPath, (string) $index), 'string', $item);
+                                self::warnOnInvalidModifyRequestChange(\sprintf('%s.%s', $headerPath, (string) $index), 'string', $item);
 
                                 break 2;
                             }
                         }
                     } elseif (!\is_string($value)) {
-                        self::assertValidModifyRequestChange($headerPath, 'string|non-empty-array<array-key, string>', $value);
+                        self::warnOnInvalidModifyRequestChange($headerPath, 'string|non-empty-array<array-key, string>', $value);
 
                         break;
                     }
@@ -380,14 +364,14 @@ final class Utils
         }
 
         if (!\is_array($changes['remove_headers'])) {
-            self::assertValidModifyRequestChange('remove_headers', 'array<array-key, string|int>', $changes['remove_headers']);
+            self::warnOnInvalidModifyRequestChange('remove_headers', 'array<array-key, string|int>', $changes['remove_headers']);
 
             return;
         }
 
         foreach ($changes['remove_headers'] as $index => $header) {
             if (!\is_string($header) && !\is_int($header)) {
-                self::assertValidModifyRequestChange(\sprintf('remove_headers.%s', (string) $index), 'string|int', $header);
+                self::warnOnInvalidModifyRequestChange(\sprintf('remove_headers.%s', (string) $index), 'string|int', $header);
 
                 return;
             }
@@ -397,14 +381,16 @@ final class Utils
     /**
      * @param mixed $value
      */
-    private static function assertValidModifyRequestChange(string $key, string $expected, $value): void
+    private static function warnOnInvalidModifyRequestChange(string $key, string $expected, $value): void
     {
-        throw new \InvalidArgumentException(\sprintf(
-            'Utils::modifyRequest() change "%s" must be %s; %s provided.',
+        \trigger_deprecation(
+            'guzzlehttp/psr7',
+            '2.11',
+            'Passing %s to Utils::modifyRequest() change "%s" is deprecated; guzzlehttp/psr7 3.0 requires %s.',
+            \get_debug_type($value),
             $key,
-            $expected,
-            \get_debug_type($value)
-        ));
+            $expected
+        );
     }
 
     /**
@@ -419,7 +405,7 @@ final class Utils
         $size = 0;
 
         while (!$stream->eof()) {
-            if ('' === ($byte = self::read($stream, 1, 'Unable to read line from stream: timed out'))) {
+            if ('' === ($byte = $stream->read(1))) {
                 return $buffer;
             }
             $buffer .= $byte;
@@ -433,11 +419,17 @@ final class Utils
     }
 
     /**
-     * Redact the user info part of a URI.
+     * Redact the password in the user info part of a URI.
      */
     public static function redactUserInfo(UriInterface $uri): UriInterface
     {
-        return $uri->getUserInfo() === '' ? $uri : $uri->withUserInfo('***');
+        $userInfo = $uri->getUserInfo();
+
+        if (false !== ($pos = \strpos($userInfo, ':'))) {
+            return $uri->withUserInfo(\substr($userInfo, 0, $pos), '***');
+        }
+
+        return $uri;
     }
 
     /**
@@ -470,8 +462,8 @@ final class Utils
      *   in subsequent reads. String inputs are always treated as string bodies,
      *   even when they name callable functions.
      *
-     * @param resource|string|int|float|bool|StreamInterface|callable|\Iterator|\Stringable|null $resource Entity body data
-     * @param array{size?: int, metadata?: array}                                                $options  Additional options
+     * @param resource|string|int|float|bool|StreamInterface|callable|\Iterator|null $resource Entity body data
+     * @param array{size?: int, metadata?: array}                                    $options  Additional options
      *
      * @throws \InvalidArgumentException if the $resource arg is not valid.
      */
@@ -508,22 +500,14 @@ final class Utils
                 if ($resource instanceof StreamInterface) {
                     return $resource;
                 } elseif ($resource instanceof \Iterator) {
-                    return new PumpStream(function (int $length) use ($resource) {
+                    return new PumpStream(function () use ($resource) {
                         if (!$resource->valid()) {
                             return false;
                         }
                         $result = $resource->current();
                         $resource->next();
 
-                        if ($result === null || is_scalar($result)) {
-                            return (string) $result;
-                        }
-
-                        if (is_object($result) && method_exists($result, '__toString')) {
-                            return (string) $result;
-                        }
-
-                        throw new \UnexpectedValueException('Iterator must yield scalar, null, or stringable values');
+                        return $result;
                     }, $options);
                 } elseif (method_exists($resource, '__toString')) {
                     return self::streamFor((string) $resource, $options);
@@ -537,7 +521,7 @@ final class Utils
             return new PumpStream($resource, $options);
         }
 
-        throw new \InvalidArgumentException('Invalid resource type: '.\get_debug_type($resource));
+        throw new \InvalidArgumentException('Invalid resource type: '.gettype($resource));
     }
 
     /**
@@ -617,21 +601,13 @@ final class Utils
             $contents = stream_get_contents($stream);
 
             if ($contents === false) {
-                $ex = StreamTimeout::isResourceReadTimedOut($stream)
-                    ? new TimeoutException('Unable to read stream contents: timed out')
-                    : new \RuntimeException('Unable to read stream contents');
-            } elseif (StreamTimeout::isResourceReadTimedOut($stream)) {
-                $ex = new TimeoutException('Unable to read stream contents: timed out');
+                $ex = new \RuntimeException('Unable to read stream contents');
             }
-        } catch (TimeoutException $e) {
-            $ex = $e;
         } catch (\Throwable $e) {
-            $ex = StreamTimeout::isResourceReadTimedOut($stream)
-                ? new TimeoutException('Unable to read stream contents: timed out', 0, $e)
-                : new \RuntimeException(sprintf(
-                    'Unable to read stream contents: %s',
-                    $e->getMessage()
-                ), 0, $e);
+            $ex = new \RuntimeException(sprintf(
+                'Unable to read stream contents: %s',
+                $e->getMessage()
+            ), 0, $e);
         }
 
         restore_error_handler();
@@ -642,42 +618,6 @@ final class Utils
         }
 
         return $contents;
-    }
-
-    private static function read(StreamInterface $stream, int $length, string $timeoutMessage): string
-    {
-        try {
-            $buffer = $stream->read($length);
-        } catch (TimeoutException $e) {
-            throw $e;
-        } catch (\RuntimeException $e) {
-            self::throwIfReadTimedOut($stream, $timeoutMessage, $e);
-
-            throw $e;
-        }
-
-        if ($buffer === '') {
-            self::throwIfReadTimedOut($stream, $timeoutMessage);
-        }
-
-        return $buffer;
-    }
-
-    private static function throwIfReadTimedOut(
-        StreamInterface $stream,
-        string $message,
-        ?\Throwable $previous = null
-    ): void {
-        if (StreamTimeout::isReadTimedOut($stream)) {
-            throw new TimeoutException($message, 0, $previous);
-        }
-    }
-
-    private static function throwIfWriteTimedOut(StreamInterface $stream, ?\Throwable $previous = null): void
-    {
-        if (StreamTimeout::isWriteTimedOut($stream)) {
-            throw new TimeoutException('Unable to write to stream: timed out', 0, $previous);
-        }
     }
 
     /**

@@ -1,12 +1,9 @@
 <?php
 
-declare(strict_types=1);
-
 namespace GuzzleHttp;
 
 use GuzzleHttp\Promise\PromiseInterface;
 use Psr\Http\Message\RequestInterface;
-use Psr\Http\Message\ResponseInterface;
 
 /**
  * Prepares requests that contain a body, adding the Content-Length,
@@ -17,21 +14,18 @@ use Psr\Http\Message\ResponseInterface;
 class PrepareBodyMiddleware
 {
     /**
-     * @var callable(RequestInterface, array<array-key, mixed>): PromiseInterface<ResponseInterface, mixed>
+     * @var callable(RequestInterface, array): PromiseInterface
      */
     private $nextHandler;
 
     /**
-     * @param callable(RequestInterface, array<array-key, mixed>): PromiseInterface<ResponseInterface, mixed> $nextHandler Next handler to invoke.
+     * @param callable(RequestInterface, array): PromiseInterface $nextHandler Next handler to invoke.
      */
     public function __construct(callable $nextHandler)
     {
         $this->nextHandler = $nextHandler;
     }
 
-    /**
-     * @return PromiseInterface<ResponseInterface, mixed>
-     */
     public function __invoke(RequestInterface $request, array $options): PromiseInterface
     {
         $fn = $this->nextHandler;
@@ -58,7 +52,7 @@ class PrepareBodyMiddleware
         ) {
             $size = $request->getBody()->getSize();
             if ($size !== null) {
-                $modify['set_headers']['Content-Length'] = (string) $size;
+                $modify['set_headers']['Content-Length'] = $size;
             } else {
                 $modify['set_headers']['Transfer-Encoding'] = 'chunked';
             }
@@ -82,8 +76,8 @@ class PrepareBodyMiddleware
 
         $expect = $options['expect'] ?? null;
 
-        // Return if disabled or not using HTTP/1.1.
-        if ($expect === false || '1.1' !== $request->getProtocolVersion()) {
+        // Return if disabled or using HTTP/1.0
+        if ($expect === false || $request->getProtocolVersion() === '1.0') {
             return;
         }
 

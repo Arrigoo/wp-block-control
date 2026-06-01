@@ -21,7 +21,8 @@ final class InflateStream implements StreamInterface
 {
     use StreamDecoratorTrait;
 
-    private StreamInterface $stream;
+    /** @var StreamInterface */
+    private $stream;
 
     public function __construct(StreamInterface $stream)
     {

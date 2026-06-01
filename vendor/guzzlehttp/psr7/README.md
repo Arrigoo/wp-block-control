@@ -26,17 +26,8 @@ composer require guzzlehttp/psr7
 |---------|---------------------|--------------|
 | 1.x     | EOL (2024-06-30)    | >=5.4,<8.2   |
 | 2.x     | Latest              | >=7.2.5,<8.6 |
-| 3.x     | Experimental        | >=7.4,<8.6   |
 
-See [UPGRADING.md](UPGRADING.md) for package upgrade notes.
-
-## HTTP Method Casing
-
-HTTP method names are case-sensitive in PSR-7. Requests created explicitly with
-`Request`, `ServerRequest`, `withMethod()`, `Message::parseRequest()`, or the
-PSR-17 factories preserve the method string as provided. `ServerRequest::fromGlobals()`
-normalizes `$_SERVER['REQUEST_METHOD']` to uppercase for compatibility when
-hydrating requests from PHP server globals.
+See [UPGRADING.md](UPGRADING.md) for notes on upgrading from 1.x to 2.0.
 
 
 ## AppendStream
@@ -286,7 +277,7 @@ class EofCallbackStream implements StreamInterface
         $this->callback = $cb;
     }
 
-    public function read(int $length): string
+    public function read($length)
     {
         $result = $this->stream->read($length);
 
@@ -478,9 +469,10 @@ Remove the items given by the keys, case insensitively from the data.
 Copy the contents of a stream into another stream until the given number
 of bytes have been read.
 
-Throws `GuzzleHttp\Psr7\Exception\TimeoutException` when PHP-style timeout
-metadata can be detected after a source read or destination write cannot make
-progress.
+The copy stops if the destination `write()` returns 0, for example a
+`BufferStream` at its high water mark or a full `DroppingStream`. For a
+guaranteed full copy, use a normal writable stream such as a file or
+`php://temp` stream.
 
 
 ## `GuzzleHttp\Psr7\Utils::copyToString`
@@ -489,9 +481,6 @@ progress.
 
 Copy the contents of a stream into a string until the given number of
 bytes have been read.
-
-Throws `GuzzleHttp\Psr7\Exception\TimeoutException` when PHP-style timeout
-metadata can be detected after a stream read cannot make progress.
 
 
 ## `GuzzleHttp\Psr7\Utils::hash`
@@ -502,9 +491,6 @@ Calculate a hash of a stream.
 
 This method reads the entire stream to calculate a rolling hash, based on
 PHP's `hash_init` functions.
-
-Throws `GuzzleHttp\Psr7\Exception\TimeoutException` when PHP-style timeout
-metadata can be detected after a stream read cannot make progress.
 
 
 ## `GuzzleHttp\Psr7\Utils::modifyRequest`
@@ -517,14 +503,12 @@ This method is useful for reducing the number of clones needed to mutate
 a message.
 
 - method: (string) Changes the HTTP method.
-- set_headers: (array) Sets the given headers. Values must be strings or arrays
-  of strings.
-- remove_headers: (array) Remove the given headers. Values may be strings or
-  integers.
+- set_headers: (array) Sets the given headers.
+- remove_headers: (array) Remove the given headers.
 - body: (mixed) Sets the given body. Present non-null values are converted with
   `GuzzleHttp\Psr7\Utils::streamFor()`, including scalar values, resources,
   streams, iterators, callable arrays, closures, invokable objects, and
-  stringable objects. String inputs remain literal bodies.
+  objects with `__toString()`. String inputs remain literal bodies.
 - uri: (UriInterface) Set the URI.
 - query: (string) Set the query string value of the URI.
 - version: (string) Set the protocol version.
@@ -536,20 +520,17 @@ a message.
 
 Read a line from the stream up to the maximum allowed buffer length.
 
-Throws `GuzzleHttp\Psr7\Exception\TimeoutException` when PHP-style timeout
-metadata can be detected after a stream read cannot make progress.
-
 
 ## `GuzzleHttp\Psr7\Utils::redactUserInfo`
 
 `public static function redactUserInfo(UriInterface $uri): UriInterface`
 
-Redact the user info part of a URI.
+Redact the password in the user info part of a URI.
 
 
 ## `GuzzleHttp\Psr7\Utils::streamFor`
 
-`public static function streamFor(resource|string|null|int|float|bool|StreamInterface|callable|\Iterator|\Stringable $resource = '', array $options = []): StreamInterface`
+`public static function streamFor(resource|string|null|int|float|bool|StreamInterface|callable|\Iterator $resource = '', array $options = []): StreamInterface`
 
 Create a new stream based on the input type.
 
@@ -615,9 +596,6 @@ Safely gets the contents of a given stream.
 When stream_get_contents fails, PHP normally raises a warning. This
 function adds an error handler that checks for errors and throws an
 exception instead.
-
-Throws `GuzzleHttp\Psr7\Exception\TimeoutException` when PHP-style timeout
-metadata can be detected after the stream read cannot make progress.
 
 
 ## `GuzzleHttp\Psr7\Utils::uriFor`
@@ -756,7 +734,7 @@ provided key are removed.
 
 Determines if a modified URL should be considered cross-origin with respect to an original URL.
 
-Two URLs are cross-origin when their scheme, host, or effective port differ. Host comparison is case-insensitive, and missing ports use the default port for `http` or `https`.
+Two URLs are cross-origin when their scheme, host, or effective port differ. Host comparison is case-insensitive, and missing ports use the default port for `http` or `https`. Other schemes do not receive implicit default ports.
 
 This helper only compares URI origins. It does not implement redirect handling or credential policy.
 

@@ -13,14 +13,16 @@ use Psr\Http\Message\StreamInterface;
 trait MessageTrait
 {
     /** @var string[][] Map of all registered headers, as original name => array of values */
-    private array $headers = [];
+    private $headers = [];
 
     /** @var string[] Map of lowercase header name => original name at registration */
-    private array $headerNames = [];
+    private $headerNames = [];
 
-    private string $protocol = '1.1';
+    /** @var string */
+    private $protocol = '1.1';
 
-    private ?StreamInterface $stream = null;
+    /** @var StreamInterface|null */
+    private $stream;
 
     public function getProtocolVersion(): string
     {
@@ -30,9 +32,16 @@ trait MessageTrait
     /**
      * @return static
      */
-    public function withProtocolVersion(string $version): MessageInterface
+    public function withProtocolVersion($version): MessageInterface
     {
-        $this->assertProtocolVersion($version);
+        if (!\is_string($version)) {
+            \trigger_deprecation(
+                'guzzlehttp/psr7',
+                '2.11',
+                'Passing %s to MessageInterface::withProtocolVersion() is deprecated; guzzlehttp/psr7 3.0 requires string.',
+                \get_debug_type($version)
+            );
+        }
 
         if ($this->protocol === $version) {
             return $this;
@@ -49,14 +58,14 @@ trait MessageTrait
         return $this->headers;
     }
 
-    public function hasHeader(string $name): bool
+    public function hasHeader($header): bool
     {
-        return isset($this->headerNames[strtolower($name)]);
+        return isset($this->headerNames[strtolower($header)]);
     }
 
-    public function getHeader(string $name): array
+    public function getHeader($header): array
     {
-        $header = strtolower($name);
+        $header = strtolower($header);
 
         if (!isset($this->headerNames[$header])) {
             return [];
@@ -67,26 +76,39 @@ trait MessageTrait
         return $this->headers[$header];
     }
 
-    public function getHeaderLine(string $name): string
+    public function getHeaderLine($header): string
     {
-        return implode(', ', $this->getHeader($name));
+        return implode(', ', $this->getHeader($header));
     }
 
     /**
      * @return static
      */
-    public function withHeader(string $name, $value): MessageInterface
+    public function withHeader($header, $value): MessageInterface
     {
-        $this->assertHeader($name);
+        $this->assertHeader($header);
+        $values = \is_array($value) ? $value : [$value];
+        foreach ($values as $item) {
+            if (!\is_string($item) && (\is_scalar($item) || $item === null)) {
+                \trigger_deprecation(
+                    'guzzlehttp/psr7',
+                    '2.11',
+                    'Passing %s to MessageInterface::withHeader() is deprecated; guzzlehttp/psr7 3.0 requires string|string[].',
+                    \get_debug_type($item)
+                );
+
+                break;
+            }
+        }
         $value = $this->normalizeHeaderValue($value);
-        $normalized = strtolower($name);
+        $normalized = strtolower($header);
 
         $new = clone $this;
         if (isset($new->headerNames[$normalized])) {
             unset($new->headers[$new->headerNames[$normalized]]);
         }
-        $new->headerNames[$normalized] = $name;
-        $new->headers[$name] = $value;
+        $new->headerNames[$normalized] = $header;
+        $new->headers[$header] = $value;
 
         return $new;
     }
@@ -94,19 +116,32 @@ trait MessageTrait
     /**
      * @return static
      */
-    public function withAddedHeader(string $name, $value): MessageInterface
+    public function withAddedHeader($header, $value): MessageInterface
     {
-        $this->assertHeader($name);
+        $this->assertHeader($header);
+        $values = \is_array($value) ? $value : [$value];
+        foreach ($values as $item) {
+            if (!\is_string($item) && (\is_scalar($item) || $item === null)) {
+                \trigger_deprecation(
+                    'guzzlehttp/psr7',
+                    '2.11',
+                    'Passing %s to MessageInterface::withAddedHeader() is deprecated; guzzlehttp/psr7 3.0 requires string|string[].',
+                    \get_debug_type($item)
+                );
+
+                break;
+            }
+        }
         $value = $this->normalizeHeaderValue($value);
-        $normalized = strtolower($name);
+        $normalized = strtolower($header);
 
         $new = clone $this;
         if (isset($new->headerNames[$normalized])) {
-            $name = $this->headerNames[$normalized];
-            $new->headers[$name] = array_merge($this->headers[$name], $value);
+            $header = $this->headerNames[$normalized];
+            $new->headers[$header] = array_merge($this->headers[$header], $value);
         } else {
-            $new->headerNames[$normalized] = $name;
-            $new->headers[$name] = $value;
+            $new->headerNames[$normalized] = $header;
+            $new->headers[$header] = $value;
         }
 
         return $new;
@@ -115,18 +150,18 @@ trait MessageTrait
     /**
      * @return static
      */
-    public function withoutHeader(string $name): MessageInterface
+    public function withoutHeader($header): MessageInterface
     {
-        $normalized = strtolower($name);
+        $normalized = strtolower($header);
 
         if (!isset($this->headerNames[$normalized])) {
             return $this;
         }
 
-        $name = $this->headerNames[$normalized];
+        $header = $this->headerNames[$normalized];
 
         $new = clone $this;
-        unset($new->headers[$name], $new->headerNames[$normalized]);
+        unset($new->headers[$header], $new->headerNames[$normalized]);
 
         return $new;
     }
@@ -166,6 +201,20 @@ trait MessageTrait
             $header = (string) $header;
 
             $this->assertHeader($header);
+            $values = \is_array($value) ? $value : [$value];
+            foreach ($values as $item) {
+                if (!\is_string($item) && (\is_scalar($item) || $item === null)) {
+                    \trigger_deprecation(
+                        'guzzlehttp/psr7',
+                        '2.11',
+                        'Passing %s to %s::__construct() is deprecated; guzzlehttp/psr7 3.0 requires string|string[].',
+                        \get_debug_type($item),
+                        static::class
+                    );
+
+                    break;
+                }
+            }
             $value = $this->normalizeHeaderValue($value);
             $normalized = strtolower($header);
             if (isset($this->headerNames[$normalized])) {
@@ -186,7 +235,11 @@ trait MessageTrait
     private function normalizeHeaderValue($value): array
     {
         if (is_array($value) && $value === []) {
-            throw new \InvalidArgumentException('Header value must be a non-empty array or string.');
+            \trigger_deprecation(
+                'guzzlehttp/psr7',
+                '2.11',
+                'Passing an empty array as a header value is deprecated; guzzlehttp/psr7 3.0 rejects empty header value arrays.'
+            );
         }
 
         if (!is_array($value)) {
@@ -212,15 +265,15 @@ trait MessageTrait
      */
     private function trimAndValidateHeaderValues(array $values): array
     {
-        return array_map(function ($value): string {
-            if (!is_string($value)) {
+        return array_map(function ($value) {
+            if (!is_scalar($value) && null !== $value) {
                 throw new \InvalidArgumentException(sprintf(
-                    'Header value must be a string or array of strings but %s provided.',
-                    \get_debug_type($value)
+                    'Header value must be scalar or null but %s provided.',
+                    is_object($value) ? get_class($value) : gettype($value)
                 ));
             }
 
-            $trimmed = trim($value, " \t");
+            $trimmed = trim((string) $value, " \t");
             $this->assertValue($trimmed);
 
             return $trimmed;
@@ -229,20 +282,22 @@ trait MessageTrait
 
     /**
      * @see https://datatracker.ietf.org/doc/html/rfc7230#section-3.2
+     *
+     * @param mixed $header
      */
-    private function assertHeader(string $header): void
+    private function assertHeader($header): void
     {
+        if (!is_string($header)) {
+            throw new \InvalidArgumentException(sprintf(
+                'Header name must be a string but %s provided.',
+                is_object($header) ? get_class($header) : gettype($header)
+            ));
+        }
+
         if (!preg_match('/^[a-zA-Z0-9\'`#$%&*+.^_|~!-]+$/D', $header)) {
             throw new \InvalidArgumentException(
                 sprintf('"%s" is not valid header name.', $header)
             );
-        }
-    }
-
-    private function assertProtocolVersion(string $version): void
-    {
-        if (!preg_match('/^\d+(?:\.\d+)?$/D', $version)) {
-            throw new \InvalidArgumentException('Protocol version must be a valid HTTP version number.');
         }
     }
 

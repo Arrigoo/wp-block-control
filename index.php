@@ -7,6 +7,8 @@
  * Author: Arrigoo.io
  */
 
+
+require_once __DIR__ . '/vendor/autoload.php';
 require_once __DIR__ . '/src_php/BlockControl.php';
 require_once __DIR__ . '/src_php/EndUser.php';
 require_once __DIR__ . '/src_php/AdminSettings.php';

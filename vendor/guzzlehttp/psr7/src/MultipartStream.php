@@ -14,9 +14,11 @@ final class MultipartStream implements StreamInterface
 {
     use StreamDecoratorTrait;
 
-    private string $boundary;
+    /** @var string */
+    private $boundary;
 
-    private StreamInterface $stream;
+    /** @var StreamInterface */
+    private $stream;
 
     private const BOUNDARY_CHARS = "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ'()+_,-./:=? ";
 
@@ -40,11 +42,15 @@ final class MultipartStream implements StreamInterface
      */
     public function __construct(array $elements = [], ?string $boundary = null)
     {
-        if ($boundary !== null) {
-            self::validateBoundary($boundary);
+        if ($boundary !== null && !self::isValidBoundary($boundary)) {
+            \trigger_deprecation(
+                'guzzlehttp/psr7',
+                '2.11',
+                'Passing an invalid multipart boundary to MultipartStream::__construct() is deprecated; guzzlehttp/psr7 3.0 rejects invalid multipart boundaries.'
+            );
         }
 
-        $this->boundary = $boundary ?? bin2hex(random_bytes(20));
+        $this->boundary = $boundary ?: bin2hex(random_bytes(20));
         $this->stream = $this->createStream($elements);
     }
 
@@ -68,10 +74,6 @@ final class MultipartStream implements StreamInterface
         $str = '';
         foreach ($headers as $key => $value) {
             $key = (string) $key;
-
-            self::validatePartHeaderName($key);
-            self::validatePartHeaderValue($value);
-
             $str .= "{$key}: {$value}\r\n";
         }
 
@@ -173,14 +175,21 @@ final class MultipartStream implements StreamInterface
         // Set a default content-disposition header if one was no provided
         $disposition = self::getHeader($headers, 'content-disposition');
         if (!$disposition) {
-            $escapedName = self::escapeContentDispositionParameter($name);
             $headers['Content-Disposition'] = ($filename === '0' || $filename)
                 ? sprintf(
                     'form-data; name="%s"; filename="%s"',
-                    $escapedName,
-                    self::escapeContentDispositionParameter(basename($filename))
+                    $name,
+                    basename($filename)
                 )
-                : sprintf('form-data; name="%s"', $escapedName);
+                : "form-data; name=\"{$name}\"";
+        }
+
+        // Set a default content-length header if one was no provided
+        $length = self::getHeader($headers, 'content-length');
+        if (!$length) {
+            if ($length = $stream->getSize()) {
+                $headers['Content-Length'] = (string) $length;
+            }
         }
 
         // Set a default Content-Type if one was not supplied
@@ -207,17 +216,15 @@ final class MultipartStream implements StreamInterface
         return null;
     }
 
-    private static function validateBoundary(string $boundary): void
+    private static function isValidBoundary(string $boundary): bool
     {
         $length = strlen($boundary);
 
         if ($length < 1 || $length > 70 || $boundary[$length - 1] === ' ') {
-            throw new \InvalidArgumentException('Invalid multipart boundary.');
+            return false;
         }
 
-        if (strspn($boundary, self::BOUNDARY_CHARS) !== $length) {
-            throw new \InvalidArgumentException('Invalid multipart boundary.');
-        }
+        return strspn($boundary, self::BOUNDARY_CHARS) === $length;
     }
 
     /**
@@ -230,15 +237,27 @@ final class MultipartStream implements StreamInterface
         $normalized = [];
 
         foreach ($headers as $key => $value) {
-            $key = (string) $key;
-
-            self::validatePartHeaderName($key);
+            self::deprecateInvalidPartHeaderName((string) $key);
 
             if (!is_string($value)) {
-                throw new \InvalidArgumentException('Multipart part header value must be a string.');
+                if (!is_scalar($value) && $value !== null && !(is_object($value) && method_exists($value, '__toString'))) {
+                    throw new \InvalidArgumentException(sprintf(
+                        'Multipart part header value must be a string or stringable value but %s provided.',
+                        \get_debug_type($value)
+                    ));
+                }
+
+                \trigger_deprecation(
+                    'guzzlehttp/psr7',
+                    '2.11',
+                    'Passing %s as a multipart part header value is deprecated; guzzlehttp/psr7 3.0 requires string multipart part header values.',
+                    \get_debug_type($value)
+                );
             }
 
-            self::validatePartHeaderValue($value);
+            $value = (string) $value;
+
+            self::deprecateInvalidPartHeaderValue($value);
 
             $normalized[$key] = $value;
         }
@@ -246,23 +265,25 @@ final class MultipartStream implements StreamInterface
         return $normalized;
     }
 
-    private static function validatePartHeaderName(string $name): void
+    private static function deprecateInvalidPartHeaderName(string $name): void
     {
         if (!preg_match('/^[a-zA-Z0-9\'`#$%&*+.^_|~!-]+$/D', $name)) {
-            throw new \InvalidArgumentException(sprintf('"%s" is not valid multipart part header name.', $name));
+            \trigger_deprecation(
+                'guzzlehttp/psr7',
+                '2.11',
+                'Passing an invalid multipart part header name to MultipartStream is deprecated; guzzlehttp/psr7 3.0 rejects invalid multipart part header names.'
+            );
         }
     }
 
-    private static function validatePartHeaderValue(string $value): void
+    private static function deprecateInvalidPartHeaderValue(string $value): void
     {
         if (!preg_match('/^[\x20\x09\x21-\x7E\x80-\xFF]*$/D', $value)) {
-            throw new \InvalidArgumentException(sprintf('"%s" is not valid multipart part header value.', $value));
+            \trigger_deprecation(
+                'guzzlehttp/psr7',
+                '2.11',
+                'Passing an invalid multipart part header value to MultipartStream is deprecated; guzzlehttp/psr7 3.0 rejects invalid multipart part header values.'
+            );
         }
-    }
-
-    private static function escapeContentDispositionParameter(string $value): string
-    {
-        // Match WHATWG browser multipart/form-data behavior: escape CR, LF, and DQUOTE only.
-        return str_replace(["\r", "\n", '"'], ['%0D', '%0A', '%22'], $value);
     }
 }

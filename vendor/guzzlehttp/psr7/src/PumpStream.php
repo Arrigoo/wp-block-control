@@ -24,13 +24,17 @@ final class PumpStream implements StreamInterface
     /** @var callable|null */
     private $source;
 
-    private ?int $size;
+    /** @var int|null */
+    private $size;
 
-    private int $tellPos = 0;
+    /** @var int */
+    private $tellPos = 0;
 
-    private array $metadata;
+    /** @var array */
+    private $metadata;
 
-    private BufferStream $buffer;
+    /** @var BufferStream */
+    private $buffer;
 
     /**
      * @param (callable(): (string|false|null))|(callable(int): (string|false|null)) $source  Source of the stream data. The callable receives
@@ -55,7 +59,16 @@ final class PumpStream implements StreamInterface
 
     public function __toString(): string
     {
-        return Utils::copyToString($this);
+        try {
+            return Utils::copyToString($this);
+        } catch (\Throwable $e) {
+            if (\PHP_VERSION_ID >= 70400) {
+                throw $e;
+            }
+            trigger_error(sprintf('%s::__toString exception: %s', self::class, (string) $e), E_USER_ERROR);
+
+            return '';
+        }
     }
 
     public function close(): void
@@ -96,8 +109,26 @@ final class PumpStream implements StreamInterface
         $this->seek(0);
     }
 
-    public function seek(int $offset, int $whence = SEEK_SET): void
+    public function seek($offset, $whence = SEEK_SET): void
     {
+        if (!\is_int($offset)) {
+            \trigger_deprecation(
+                'guzzlehttp/psr7',
+                '2.11',
+                'Passing %s to StreamInterface::seek() is deprecated; guzzlehttp/psr7 3.0 requires int for $offset.',
+                \get_debug_type($offset)
+            );
+        }
+
+        if (!\is_int($whence)) {
+            \trigger_deprecation(
+                'guzzlehttp/psr7',
+                '2.11',
+                'Passing %s to StreamInterface::seek() is deprecated; guzzlehttp/psr7 3.0 requires int for $whence.',
+                \get_debug_type($whence)
+            );
+        }
+
         throw new \RuntimeException('Cannot seek a PumpStream');
     }
 
@@ -106,8 +137,17 @@ final class PumpStream implements StreamInterface
         return false;
     }
 
-    public function write(string $string): int
+    public function write($string): int
     {
+        if (!\is_string($string)) {
+            \trigger_deprecation(
+                'guzzlehttp/psr7',
+                '2.11',
+                'Passing %s to StreamInterface::write() is deprecated; guzzlehttp/psr7 3.0 requires string for $string.',
+                \get_debug_type($string)
+            );
+        }
+
         throw new \RuntimeException('Cannot write to a PumpStream');
     }
 
@@ -116,8 +156,17 @@ final class PumpStream implements StreamInterface
         return true;
     }
 
-    public function read(int $length): string
+    public function read($length): string
     {
+        if (!\is_int($length)) {
+            \trigger_deprecation(
+                'guzzlehttp/psr7',
+                '2.11',
+                'Passing %s to StreamInterface::read() is deprecated; guzzlehttp/psr7 3.0 requires int for $length.',
+                \get_debug_type($length)
+            );
+        }
+
         $data = $this->buffer->read($length);
         $readLen = strlen($data);
         $this->tellPos += $readLen;
@@ -134,15 +183,29 @@ final class PumpStream implements StreamInterface
 
     public function getContents(): string
     {
-        return Utils::copyToString($this);
+        $result = '';
+        while (!$this->eof()) {
+            $result .= $this->read(1000000);
+        }
+
+        return $result;
     }
 
     /**
      * @return mixed
      */
-    public function getMetadata(?string $key = null)
+    public function getMetadata($key = null)
     {
-        if ($key === null) {
+        if ($key !== null && !\is_string($key)) {
+            \trigger_deprecation(
+                'guzzlehttp/psr7',
+                '2.11',
+                'Passing %s to StreamInterface::getMetadata() is deprecated; guzzlehttp/psr7 3.0 requires string|null for $key.',
+                \get_debug_type($key)
+            );
+        }
+
+        if (!$key) {
             return $this->metadata;
         }
 
@@ -153,7 +216,6 @@ final class PumpStream implements StreamInterface
     {
         if ($this->source !== null) {
             do {
-                /** @var string|false|null $data */
                 $data = ($this->source)($length);
                 if ($data === false || $data === null) {
                     $this->source = null;

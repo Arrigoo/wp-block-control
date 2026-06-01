@@ -77,6 +77,8 @@ class BlockControl {
             update_option('ARRIGOO_CDP', $segment_cache);
             return $segments;
         } catch (GuzzleException $e) {
+            // TEMPORARY DEBUG: log the exception thrown while fetching segments.
+            error_log('[Arrigoo CDP DEBUG] getSegments() threw GuzzleException: ' . $e->getMessage());
             return $cached_segments['segments'];
         }
     }

@@ -78,9 +78,11 @@ class Response implements ResponseInterface
         511 => 'Network Authentication Required',
     ];
 
-    private string $reasonPhrase;
+    /** @var string */
+    private $reasonPhrase;
 
-    private int $statusCode;
+    /** @var int */
+    private $statusCode;
 
     /**
      * @param int                                  $status  Status code
@@ -97,7 +99,6 @@ class Response implements ResponseInterface
         ?string $reason = null
     ) {
         $this->assertStatusCodeRange($status);
-        $this->assertProtocolVersion($version);
 
         $this->statusCode = $status;
 
@@ -107,13 +108,10 @@ class Response implements ResponseInterface
 
         $this->setHeaders($headers);
         if ($reason == '' && isset(self::PHRASES[$this->statusCode])) {
-            $reasonPhrase = self::PHRASES[$this->statusCode];
+            $this->reasonPhrase = self::PHRASES[$this->statusCode];
         } else {
-            $reasonPhrase = (string) $reason;
+            $this->reasonPhrase = (string) $reason;
         }
-
-        $this->assertReasonPhrase($reasonPhrase);
-        $this->reasonPhrase = $reasonPhrase;
 
         $this->protocol = $version;
     }
@@ -128,32 +126,54 @@ class Response implements ResponseInterface
         return $this->reasonPhrase;
     }
 
-    public function withStatus(int $code, string $reasonPhrase = ''): ResponseInterface
+    public function withStatus($code, $reasonPhrase = ''): ResponseInterface
     {
+        if (!\is_int($code) && \filter_var($code, \FILTER_VALIDATE_INT) !== false) {
+            \trigger_deprecation(
+                'guzzlehttp/psr7',
+                '2.11',
+                'Passing %s to ResponseInterface::withStatus() is deprecated; guzzlehttp/psr7 3.0 requires int for $code.',
+                \get_debug_type($code)
+            );
+        }
+
+        if (!\is_string($reasonPhrase)) {
+            \trigger_deprecation(
+                'guzzlehttp/psr7',
+                '2.11',
+                'Passing %s to ResponseInterface::withStatus() is deprecated; guzzlehttp/psr7 3.0 requires string for $reasonPhrase.',
+                \get_debug_type($reasonPhrase)
+            );
+        }
+
+        $this->assertStatusCodeIsInteger($code);
+        $code = (int) $code;
         $this->assertStatusCodeRange($code);
 
         $new = clone $this;
         $new->statusCode = $code;
-        if ($reasonPhrase === '' && isset(self::PHRASES[$new->statusCode])) {
+        if ($reasonPhrase == '' && isset(self::PHRASES[$new->statusCode])) {
             $reasonPhrase = self::PHRASES[$new->statusCode];
         }
-        $this->assertReasonPhrase($reasonPhrase);
-        $new->reasonPhrase = $reasonPhrase;
+        $new->reasonPhrase = (string) $reasonPhrase;
 
         return $new;
+    }
+
+    /**
+     * @param mixed $statusCode
+     */
+    private function assertStatusCodeIsInteger($statusCode): void
+    {
+        if (filter_var($statusCode, FILTER_VALIDATE_INT) === false) {
+            throw new \InvalidArgumentException('Status code must be an integer value.');
+        }
     }
 
     private function assertStatusCodeRange(int $statusCode): void
     {
         if ($statusCode < 100 || $statusCode >= 600) {
             throw new \InvalidArgumentException('Status code must be an integer value between 1xx and 5xx.');
-        }
-    }
-
-    private function assertReasonPhrase(string $reasonPhrase): void
-    {
-        if (!preg_match('/^[\x09\x20-\x7E\x80-\xFF]*$/D', $reasonPhrase)) {
-            throw new \InvalidArgumentException('Reason phrase must not contain invalid control characters.');
         }
     }
 }

@@ -1,14 +1,15 @@
 <?php
 
-declare(strict_types=1);
-
 namespace GuzzleHttp;
 
 use Psr\Http\Message\MessageInterface;
 
 final class BodySummarizer implements BodySummarizerInterface
 {
-    private ?int $truncateAt;
+    /**
+     * @var int|null
+     */
+    private $truncateAt;
 
     public function __construct(?int $truncateAt = null)
     {

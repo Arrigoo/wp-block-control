@@ -1,7 +1,5 @@
 <?php
 
-declare(strict_types=1);
-
 namespace GuzzleHttp;
 
 use Psr\Http\Message\RequestInterface;
@@ -14,13 +12,25 @@ use Psr\Http\Message\UriInterface;
  */
 final class TransferStats
 {
-    private RequestInterface $request;
+    /**
+     * @var RequestInterface
+     */
+    private $request;
 
-    private ?ResponseInterface $response;
+    /**
+     * @var ResponseInterface|null
+     */
+    private $response;
 
-    private ?float $transferTime;
+    /**
+     * @var float|null
+     */
+    private $transferTime;
 
-    private array $handlerStats;
+    /**
+     * @var array
+     */
+    private $handlerStats;
 
     /**
      * @var mixed|null

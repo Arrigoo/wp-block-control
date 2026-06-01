@@ -1,28 +1,16 @@
 <?php
 
-declare(strict_types=1);
-
 namespace GuzzleHttp;
 
 use GuzzleHttp\Exception\InvalidArgumentException;
 use GuzzleHttp\Handler\CurlHandler;
 use GuzzleHttp\Handler\CurlMultiHandler;
-use GuzzleHttp\Handler\CurlShare;
-use GuzzleHttp\Handler\CurlShareHandleState;
-use GuzzleHttp\Handler\CurlVersion;
 use GuzzleHttp\Handler\Proxy;
 use GuzzleHttp\Handler\StreamHandler;
-use GuzzleHttp\Promise\PromiseInterface;
-use Psr\Http\Message\RequestInterface;
-use Psr\Http\Message\ResponseInterface;
 use Psr\Http\Message\UriInterface;
 
 final class Utils
 {
-    private function __construct()
-    {
-    }
-
     /**
      * Debug function used to describe the provided value type and class.
      *
@@ -91,74 +79,33 @@ final class Utils
      *
      * The returned handler is not wrapped by any default middlewares.
      *
-     * @param array{share?: mixed} $curlOptions cURL handler constructor options.
-     *
-     * @return callable(RequestInterface, array<array-key, mixed>): PromiseInterface<ResponseInterface, mixed> Returns the best handler for the given system.
+     * @return callable(\Psr\Http\Message\RequestInterface, array): \GuzzleHttp\Promise\PromiseInterface Returns the best handler for the given system.
      *
      * @throws \RuntimeException if no viable Handler is available.
      */
-    public static function chooseHandler(array $curlOptions = []): callable
+    public static function chooseHandler(): callable
     {
         $handler = null;
-        $shareMode = CurlShareHandleState::normalizeMode($curlOptions['share'] ?? null, 'share');
-        $shareRequested = $shareMode !== CurlShare::NONE;
-        $curlHandlerOptions = [];
-        $curlSupported = CurlVersion::supportsTls12()
-            && (\function_exists('curl_multi_exec') || \function_exists('curl_exec'));
 
-        if ($shareRequested && !$curlSupported) {
-            throw new \RuntimeException('cURL sharing requires the PHP cURL extension, curl_exec() or curl_multi_exec(), and a supported libcurl version.');
-        }
-
-        if ($curlSupported) {
-            if ($shareRequested) {
-                $shareState = CurlShareHandleState::fromOption($shareMode);
-                if ($shareState !== null) {
-                    $curlHandlerOptions['share'] = $shareState;
-                }
-            }
-
+        if (\defined('CURLOPT_CUSTOMREQUEST') && \function_exists('curl_version') && version_compare(curl_version()['version'], '7.34') >= 0) {
             if (\function_exists('curl_multi_exec') && \function_exists('curl_exec')) {
-                $handler = Proxy::wrapSync(new CurlMultiHandler($curlHandlerOptions), new CurlHandler($curlHandlerOptions));
+                $handler = Proxy::wrapSync(new CurlMultiHandler(), new CurlHandler());
             } elseif (\function_exists('curl_exec')) {
-                $handler = new CurlHandler($curlHandlerOptions);
+                $handler = new CurlHandler();
             } elseif (\function_exists('curl_multi_exec')) {
-                $handler = new CurlMultiHandler($curlHandlerOptions);
+                $handler = new CurlMultiHandler();
             }
         }
 
         if (\ini_get('allow_url_fopen')) {
-            $streamHandler = new StreamHandler();
-            if ($shareRequested) {
-                $streamHandler = self::wrapStreamHandlerCurlShare($streamHandler, $shareMode);
-            }
-
             $handler = $handler
-                ? Proxy::wrapStreaming($handler, $streamHandler)
-                : $streamHandler;
+                ? Proxy::wrapStreaming($handler, new StreamHandler())
+                : new StreamHandler();
         } elseif (!$handler) {
-            throw new \RuntimeException('GuzzleHttp requires a supported cURL version, the allow_url_fopen ini setting, or a custom HTTP handler.');
+            throw new \RuntimeException('GuzzleHttp requires cURL, the allow_url_fopen ini setting, or a custom HTTP handler.');
         }
 
         return $handler;
-    }
-
-    /**
-     * @param callable(RequestInterface, array<array-key, mixed>): PromiseInterface<ResponseInterface, mixed> $handler
-     *
-     * @return callable(RequestInterface, array<array-key, mixed>): PromiseInterface<ResponseInterface, mixed>
-     */
-    private static function wrapStreamHandlerCurlShare(callable $handler, string $shareMode): callable
-    {
-        return static function (RequestInterface $request, array $options) use ($handler, $shareMode): PromiseInterface {
-            if (\array_key_exists('curl_share', $options)) {
-                CurlShareHandleState::normalizeMode($options['curl_share'], 'curl_share');
-            }
-
-            $options['curl_share'] = $shareMode;
-
-            return $handler($request, $options);
-        };
     }
 
     /**
@@ -170,6 +117,77 @@ final class Utils
     }
 
     /**
+     * Returns the default cacert bundle for the current system.
+     *
+     * First, the openssl.cafile and curl.cainfo php.ini settings are checked.
+     * If those settings are not configured, then the common locations for
+     * bundles found on Red Hat, CentOS, Fedora, Ubuntu, Debian, FreeBSD, OS X
+     * and Windows are checked. If any of these file locations are found on
+     * disk, they will be utilized.
+     *
+     * Note: the result of this function is cached for subsequent calls.
+     *
+     * @throws \RuntimeException if no bundle can be found.
+     *
+     * @deprecated Utils::defaultCaBundle will be removed in guzzlehttp/guzzle:8.0. This method is not needed in PHP 5.6+.
+     */
+    public static function defaultCaBundle(): string
+    {
+        static $cached = null;
+        static $cafiles = [
+            // Red Hat, CentOS, Fedora (provided by the ca-certificates package)
+            '/etc/pki/tls/certs/ca-bundle.crt',
+            // Ubuntu, Debian (provided by the ca-certificates package)
+            '/etc/ssl/certs/ca-certificates.crt',
+            // FreeBSD (provided by the ca_root_nss package)
+            '/usr/local/share/certs/ca-root-nss.crt',
+            // SLES 12 (provided by the ca-certificates package)
+            '/var/lib/ca-certificates/ca-bundle.pem',
+            // OS X provided by homebrew (using the default path)
+            '/usr/local/etc/openssl/cert.pem',
+            // Google app engine
+            '/etc/ca-certificates.crt',
+            // Windows?
+            'C:\\windows\\system32\\curl-ca-bundle.crt',
+            'C:\\windows\\curl-ca-bundle.crt',
+        ];
+
+        if ($cached) {
+            return $cached;
+        }
+
+        if ($ca = \ini_get('openssl.cafile')) {
+            return $cached = $ca;
+        }
+
+        if ($ca = \ini_get('curl.cainfo')) {
+            return $cached = $ca;
+        }
+
+        foreach ($cafiles as $filename) {
+            if (\file_exists($filename)) {
+                return $cached = $filename;
+            }
+        }
+
+        throw new \RuntimeException(
+            <<< EOT
+No system CA bundle could be found in any of the the common system locations.
+PHP versions earlier than 5.6 are not properly configured to use the system's
+CA bundle by default. In order to verify peer certificates, you will need to
+supply the path on disk to a certificate bundle to the 'verify' request
+option: https://docs.guzzlephp.org/en/latest/request-options.html#verify. If
+you do not need a specific certificate bundle, then Mozilla provides a commonly
+used CA bundle which can be downloaded here (provided by the maintainer of
+cURL): https://curl.haxx.se/ca/cacert.pem. Once you have a CA bundle available
+on disk, you can set the 'openssl.cafile' PHP ini setting to point to the path
+to the file, allowing you to omit the 'verify' request option. See
+https://curl.haxx.se/docs/sslcerts.html for more information.
+EOT
+        );
+    }
+
+    /**
      * Creates an associative array of lowercase header names to the actual
      * header casing.
      */
@@ -177,41 +195,64 @@ final class Utils
     {
         $result = [];
         foreach (\array_keys($headers) as $key) {
-            $result[\strtolower((string) $key)] = $key;
+            $result[\strtolower($key)] = $key;
         }
 
         return $result;
     }
 
     /**
-     * @param mixed $protocols
+     * Returns true if the provided host matches any of the no proxy areas.
      *
-     * @return string[]
+     * This method will strip a port from the host if it is present. Each pattern
+     * can be matched with an exact match (e.g., "foo.com" == "foo.com") or a
+     * partial match: (e.g., "foo.com" == "baz.foo.com" and ".foo.com" ==
+     * "baz.foo.com", but ".foo.com" != "foo.com").
+     *
+     * Areas are matched in the following cases:
+     * 1. "*" (without quotes) always matches any hosts.
+     * 2. An exact match.
+     * 3. The area starts with "." and the area is the last part of the host. e.g.
+     *    '.mit.edu' will match any host that ends with '.mit.edu'.
+     *
+     * @param string   $host         Host to check against the patterns.
+     * @param string[] $noProxyArray An array of host patterns.
      *
      * @throws InvalidArgumentException
      */
-    public static function normalizeProtocols($protocols): array
+    public static function isHostInNoProxy(string $host, array $noProxyArray): bool
     {
-        if (!\is_array($protocols) || $protocols === []) {
-            throw new InvalidArgumentException('protocols must be a non-empty array of "http" and/or "https"');
+        if (\strlen($host) === 0) {
+            throw new InvalidArgumentException('Empty host provided');
         }
 
-        $normalized = [];
+        // Strip port if present.
+        [$host] = \explode(':', $host, 2);
 
-        foreach ($protocols as $protocol) {
-            if (!\is_string($protocol)) {
-                throw new InvalidArgumentException('protocols must contain only strings');
+        foreach ($noProxyArray as $area) {
+            // Always match on wildcards.
+            if ($area === '*') {
+                return true;
             }
 
-            $protocol = \strtolower($protocol);
-            if ($protocol !== 'http' && $protocol !== 'https') {
-                throw new InvalidArgumentException('protocols may only contain "http" and "https"');
+            if (empty($area)) {
+                // Don't match on empty values.
+                continue;
             }
 
-            $normalized[$protocol] = true;
+            if ($area === $host) {
+                // Exact matches.
+                return true;
+            }
+            // Special match if the area when prefixed with ".". Remove any
+            // existing leading "." and add a new leading ".".
+            $area = '.'.\ltrim($area, '.');
+            if (\substr($host, -\strlen($area)) === $area) {
+                return true;
+            }
         }
 
-        return \array_keys($normalized);
+        return false;
     }
 
     /**
@@ -231,15 +272,12 @@ final class Utils
      */
     public static function jsonDecode(string $json, bool $assoc = false, int $depth = 512, int $options = 0)
     {
-        if ($depth < 1) {
-            throw new InvalidArgumentException('json_decode error: Maximum stack depth exceeded');
+        $data = \json_decode($json, $assoc, $depth, $options);
+        if (\JSON_ERROR_NONE !== \json_last_error()) {
+            throw new InvalidArgumentException('json_decode error: '.\json_last_error_msg());
         }
 
-        try {
-            return \json_decode($json, $assoc, $depth, $options | \JSON_THROW_ON_ERROR);
-        } catch (\JsonException $e) {
-            throw new InvalidArgumentException('json_decode error: '.$e->getMessage(), 0, $e);
-        }
+        return $data;
     }
 
     /**
@@ -255,11 +293,13 @@ final class Utils
      */
     public static function jsonEncode($value, int $options = 0, int $depth = 512): string
     {
-        try {
-            return \json_encode($value, $options | \JSON_THROW_ON_ERROR, $depth);
-        } catch (\JsonException $e) {
-            throw new InvalidArgumentException('json_encode error: '.$e->getMessage(), 0, $e);
+        $json = \json_encode($value, $options, $depth);
+        if (\JSON_ERROR_NONE !== \json_last_error()) {
+            throw new InvalidArgumentException('json_encode error: '.\json_last_error_msg());
         }
+
+        /** @var string */
+        return $json;
     }
 
     /**
@@ -273,54 +313,6 @@ final class Utils
     public static function currentTime(): float
     {
         return (float) \function_exists('hrtime') ? \hrtime(true) / 1e9 : \microtime(true);
-    }
-
-    /**
-     * Converts a request timeout option to integer milliseconds.
-     *
-     * @param mixed $value
-     *
-     * @internal
-     */
-    public static function timeoutToMilliseconds($value, string $option): int
-    {
-        if (!\is_int($value) && !\is_float($value) && (!\is_string($value) || !\is_numeric($value))) {
-            throw new InvalidArgumentException($option.' must be a number of seconds');
-        }
-
-        $seconds = (float) $value;
-        if (!\is_finite($seconds) || $seconds < 0) {
-            throw new InvalidArgumentException($option.' must be 0 or greater than or equal to 0.001 seconds');
-        }
-
-        $milliseconds = (int) ($seconds * 1000);
-        if ($seconds > 0 && $milliseconds === 0) {
-            throw new InvalidArgumentException($option.' must be 0 or greater than or equal to 0.001 seconds');
-        }
-
-        return $milliseconds;
-    }
-
-    /**
-     * @param mixed $value
-     *
-     * @internal
-     */
-    public static function normalizeIdnConversionOption($value): ?int
-    {
-        if ($value === null || $value === false) {
-            return null;
-        }
-
-        if ($value === true) {
-            return \IDNA_DEFAULT;
-        }
-
-        if (\is_int($value)) {
-            return $value;
-        }
-
-        throw new InvalidArgumentException('idn_conversion must be true, false, null, or an integer IDNA_* bitmask');
     }
 
     /**

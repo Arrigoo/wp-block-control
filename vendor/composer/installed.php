@@ -11,9 +11,9 @@
     ),
     'versions' => array(
         'arrigoo/cdp-php-sdk' => array(
-            'pretty_version' => '0.1.0',
-            'version' => '0.1.0.0',
-            'reference' => '07a7072187a8bd7ff68817b87bbcd824f41b42cd',
+            'pretty_version' => '0.1.2',
+            'version' => '0.1.2.0',
+            'reference' => '1ab348f0bc1b0b461c04b848a7c3d8612843d8bb',
             'type' => 'library',
             'install_path' => __DIR__ . '/../arrigoo/cdp-php-sdk',
             'aliases' => array(),
@@ -29,27 +29,27 @@
             'dev_requirement' => false,
         ),
         'guzzlehttp/guzzle' => array(
-            'pretty_version' => '8.0.x-dev',
-            'version' => '8.0.9999999.9999999-dev',
-            'reference' => '7ab0b9761ad9ac51c4f837074b9958d81c62e3ee',
+            'pretty_version' => '7.9.0',
+            'version' => '7.9.0.0',
+            'reference' => '84ac2b2afc44e40d3e8e658a45d68d6d20437612',
             'type' => 'library',
             'install_path' => __DIR__ . '/../guzzlehttp/guzzle',
             'aliases' => array(),
             'dev_requirement' => false,
         ),
         'guzzlehttp/promises' => array(
-            'pretty_version' => '3.0.x-dev',
-            'version' => '3.0.9999999.9999999-dev',
-            'reference' => '2a5953a83a453d1df563299b7752ecc54f3e9101',
+            'pretty_version' => '2.5.x-dev',
+            'version' => '2.5.9999999.9999999-dev',
+            'reference' => '66c0a698721e8823258f7cc84abfe7174b4b01f0',
             'type' => 'library',
             'install_path' => __DIR__ . '/../guzzlehttp/promises',
             'aliases' => array(),
             'dev_requirement' => false,
         ),
         'guzzlehttp/psr7' => array(
-            'pretty_version' => '3.0.x-dev',
-            'version' => '3.0.9999999.9999999-dev',
-            'reference' => 'cf61986ee25baec41d786c1f5cdc71ec47b4cd67',
+            'pretty_version' => '2.11.x-dev',
+            'version' => '2.11.9999999.9999999-dev',
+            'reference' => 'aac7d94116690f3c21fc66700587a8ec8b0e1459',
             'type' => 'library',
             'install_path' => __DIR__ . '/../guzzlehttp/psr7',
             'aliases' => array(),
@@ -84,7 +84,7 @@
         'psr/http-factory-implementation' => array(
             'dev_requirement' => false,
             'provided' => array(
-                0 => '1.1',
+                0 => '1.0',
             ),
         ),
         'psr/http-message' => array(
@@ -101,8 +101,28 @@
         'psr/http-message-implementation' => array(
             'dev_requirement' => false,
             'provided' => array(
-                0 => '2.0',
+                0 => '1.0',
             ),
+        ),
+        'ralouphie/getallheaders' => array(
+            'pretty_version' => '3.0.3',
+            'version' => '3.0.3.0',
+            'reference' => '120b605dfeb996808c31b6477290a714d356e822',
+            'type' => 'library',
+            'install_path' => __DIR__ . '/../ralouphie/getallheaders',
+            'aliases' => array(),
+            'dev_requirement' => false,
+        ),
+        'symfony/deprecation-contracts' => array(
+            'pretty_version' => 'dev-main',
+            'version' => 'dev-main',
+            'reference' => '50f59d1f3ca46d41ac911f97a78626b6756af35b',
+            'type' => 'library',
+            'install_path' => __DIR__ . '/../symfony/deprecation-contracts',
+            'aliases' => array(
+                0 => '3.7.x-dev',
+            ),
+            'dev_requirement' => false,
         ),
         'symfony/polyfill-php80' => array(
             'pretty_version' => '1.x-dev',

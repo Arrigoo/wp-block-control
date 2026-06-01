@@ -1,7 +1,5 @@
 <?php
 
-declare(strict_types=1);
-
 namespace GuzzleHttp;
 
 use GuzzleHttp\Promise as P;
@@ -18,49 +16,56 @@ use Psr\Http\Message\ResponseInterface;
 class RetryMiddleware
 {
     /**
-     * @var callable(RequestInterface, array<array-key, mixed>): PromiseInterface<ResponseInterface, mixed>
+     * @var callable(RequestInterface, array): PromiseInterface
      */
     private $nextHandler;
 
     /**
-     * @var callable(int, RequestInterface, ResponseInterface|null, mixed): bool
+     * @var callable
      */
     private $decider;
 
     /**
-     * @var (callable(int): int)|(callable(int, ResponseInterface|null, RequestInterface): int)
+     * @var callable(int)
      */
     private $delay;
 
     /**
-     * @param callable(int, RequestInterface, ResponseInterface|null, mixed): bool                            $decider     Function that accepts the number of retries,
-     *                                                                                                                     a request, [response], and [rejection reason]
-     *                                                                                                                     and returns true if the request is to be retried.
-     * @param callable(RequestInterface, array<array-key, mixed>): PromiseInterface<ResponseInterface, mixed> $nextHandler Next handler to invoke.
-     * @param (callable(int): int)|(callable(int, ResponseInterface|null, RequestInterface): int)|null        $delay       Function that returns the number of milliseconds to delay.
+     * @param callable                                            $decider     Function that accepts the number of retries,
+     *                                                                         a request, [response], and [exception] and
+     *                                                                         returns true if the request is to be
+     *                                                                         retried.
+     * @param callable(RequestInterface, array): PromiseInterface $nextHandler Next handler to invoke.
+     * @param (callable(int): int)|null                           $delay       Function that accepts the number of retries
+     *                                                                         and returns the number of
+     *                                                                         milliseconds to delay.
      */
     public function __construct(callable $decider, callable $nextHandler, ?callable $delay = null)
     {
         $this->decider = $decider;
         $this->nextHandler = $nextHandler;
-        $this->delay = $delay ?: static function (int $retries): int {
-            return (int) ((2 ** ($retries - 1)) * 1000);
-        };
+        $this->delay = $delay ?: __CLASS__.'::exponentialDelay';
     }
 
     /**
-     * @return PromiseInterface<ResponseInterface, mixed>
+     * Default exponential backoff delay function.
+     *
+     * @return int milliseconds.
      */
+    public static function exponentialDelay(int $retries): int
+    {
+        return (int) 2 ** ($retries - 1) * 1000;
+    }
+
     public function __invoke(RequestInterface $request, array $options): PromiseInterface
     {
         if (!isset($options['retries'])) {
             $options['retries'] = 0;
-        } elseif (!\is_int($options['retries'])) {
-            throw new \InvalidArgumentException('retries must be an integer');
         }
 
-        /** @var PromiseInterface<ResponseInterface, mixed> */
-        return ($this->nextHandler)($request, $options)
+        $fn = $this->nextHandler;
+
+        return $fn($request, $options)
             ->then(
                 $this->onFulfilled($request, $options),
                 $this->onRejected($request, $options)
@@ -91,7 +96,7 @@ class RetryMiddleware
      */
     private function onRejected(RequestInterface $req, array $options): callable
     {
-        return function ($reason) use ($req, $options): PromiseInterface {
+        return function ($reason) use ($req, $options) {
             if (!($this->decider)(
                 $options['retries'],
                 $req,
@@ -101,37 +106,14 @@ class RetryMiddleware
                 return P\Create::rejectionFor($reason);
             }
 
-            /** @var PromiseInterface<mixed, mixed> */
             return $this->doRetry($req, $options);
         };
     }
 
-    /**
-     * @return PromiseInterface<ResponseInterface, mixed>
-     */
     private function doRetry(RequestInterface $request, array $options, ?ResponseInterface $response = null): PromiseInterface
     {
-        ++$options['retries'];
-        $options['delay'] = $this->getDelay($options['retries'], $response, $request);
+        $options['delay'] = ($this->delay)(++$options['retries'], $response, $request);
 
         return $this($request, $options);
-    }
-
-    private function getDelay(int $retries, ?ResponseInterface $response, RequestInterface $request): int
-    {
-        $delay = $this->delay;
-
-        if (self::acceptsRetryContext($delay)) {
-            return $delay($retries, $response, $request);
-        }
-
-        return $delay($retries);
-    }
-
-    private static function acceptsRetryContext(callable $callback): bool
-    {
-        $reflection = new \ReflectionFunction(\Closure::fromCallable($callback));
-
-        return $reflection->isVariadic() || $reflection->getNumberOfParameters() >= 3;
     }
 }

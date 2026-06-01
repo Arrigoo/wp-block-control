@@ -1,7 +1,5 @@
 <?php
 
-declare(strict_types=1);
-
 namespace GuzzleHttp\Handler;
 
 use GuzzleHttp\Psr7\Response;
@@ -22,49 +20,45 @@ final class EasyHandle
      */
     public $handle;
 
-    public StreamInterface $sink;
-
-    public RequestInterface $request;
+    /**
+     * @var StreamInterface Where data is being written
+     */
+    public $sink;
 
     /**
-     * @var list<string> Received HTTP headers so far
+     * @var array Received HTTP headers so far
      */
-    public array $headers = [];
+    public $headers = [];
 
     /**
      * @var ResponseInterface|null Received response (if any)
      */
-    public ?ResponseInterface $response = null;
+    public $response;
+
+    /**
+     * @var RequestInterface Request being sent
+     */
+    public $request;
 
     /**
      * @var array Request options
      */
-    public array $options = [];
+    public $options = [];
 
     /**
      * @var int cURL error number (if any)
      */
-    public int $errno = 0;
+    public $errno = 0;
 
     /**
      * @var \Throwable|null Exception during on_headers (if any)
      */
-    public ?\Throwable $onHeadersException = null;
+    public $onHeadersException;
 
     /**
-     * @var \Throwable|null Exception during progress callback (if any)
+     * @var \Exception|null Exception during createResponse (if any)
      */
-    public ?\Throwable $progressException = null;
-
-    /**
-     * @var bool Whether the progress callback requested abort
-     */
-    public bool $progressAborted = false;
-
-    /**
-     * @var \Throwable|null Exception during createResponse (if any)
-     */
-    public ?\Throwable $createResponseException = null;
+    public $createResponseException;
 
     /**
      * Attach a response to the easy handle based on the received headers.
@@ -74,8 +68,6 @@ final class EasyHandle
      */
     public function createResponse(): void
     {
-        $this->response = null;
-
         [$ver, $status, $reason, $headers] = HeaderProcessor::parseHeaders($this->headers);
 
         $normalizedKeys = Utils::normalizeHeaderKeys($headers);
@@ -88,7 +80,7 @@ final class EasyHandle
 
                 $bodyLength = (int) $this->sink->getSize();
                 if ($bodyLength) {
-                    $headers[$normalizedKeys['content-length']] = [(string) $bodyLength];
+                    $headers[$normalizedKeys['content-length']] = $bodyLength;
                 } else {
                     unset($headers[$normalizedKeys['content-length']]);
                 }
@@ -106,9 +98,13 @@ final class EasyHandle
     }
 
     /**
+     * @param string $name
+     *
+     * @return void
+     *
      * @throws \BadMethodCallException
      */
-    public function __get(string $name): void
+    public function __get($name)
     {
         $msg = $name === 'handle' ? 'The EasyHandle has been released' : 'Invalid property: '.$name;
         throw new \BadMethodCallException($msg);

@@ -1,7 +1,5 @@
 <?php
 
-declare(strict_types=1);
-
 namespace GuzzleHttp\Exception;
 
 use GuzzleHttp\BodySummarizer;
@@ -15,11 +13,20 @@ use Psr\Http\Message\ResponseInterface;
  */
 class RequestException extends TransferException implements RequestExceptionInterface
 {
-    private RequestInterface $request;
+    /**
+     * @var RequestInterface
+     */
+    private $request;
 
-    private ?ResponseInterface $response;
+    /**
+     * @var ResponseInterface|null
+     */
+    private $response;
 
-    private array $handlerContext;
+    /**
+     * @var array
+     */
+    private $handlerContext;
 
     public function __construct(
         string $message,
@@ -73,10 +80,13 @@ class RequestException extends TransferException implements RequestExceptionInte
         $level = (int) \floor($response->getStatusCode() / 100);
         if ($level === 4) {
             $label = 'Client error';
+            $className = ClientException::class;
         } elseif ($level === 5) {
             $label = 'Server error';
+            $className = ServerException::class;
         } else {
             $label = 'Unsuccessful request';
+            $className = __CLASS__;
         }
 
         $uri = \GuzzleHttp\Psr7\Utils::redactUserInfo($request->getUri());
@@ -98,15 +108,7 @@ class RequestException extends TransferException implements RequestExceptionInte
             $message .= ":\n{$summary}\n";
         }
 
-        if ($level === 4) {
-            return new ClientException($message, $request, $response, $previous, $handlerContext);
-        }
-
-        if ($level === 5) {
-            return new ServerException($message, $request, $response, $previous, $handlerContext);
-        }
-
-        return new self($message, $request, $response, $previous, $handlerContext);
+        return new $className($message, $request, $response, $previous, $handlerContext);
     }
 
     /**

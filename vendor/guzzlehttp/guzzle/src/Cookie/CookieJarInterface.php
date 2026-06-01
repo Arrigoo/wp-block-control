@@ -1,7 +1,5 @@
 <?php
 
-declare(strict_types=1);
-
 namespace GuzzleHttp\Cookie;
 
 use Psr\Http\Message\RequestInterface;
