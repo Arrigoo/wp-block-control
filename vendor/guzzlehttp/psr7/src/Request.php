@@ -1,0 +1,185 @@
+<?php
+
+declare(strict_types=1);
+
+namespace GuzzleHttp\Psr7;
+
+use InvalidArgumentException;
+use Psr\Http\Message\RequestInterface;
+use Psr\Http\Message\StreamInterface;
+use Psr\Http\Message\UriInterface;
+
+/**
+ * PSR-7 request implementation.
+ */
+class Request implements RequestInterface
+{
+    use MessageTrait;
+
+    private string $method;
+
+    private ?string $requestTarget = null;
+
+    private UriInterface $uri;
+
+    /**
+     * @param string                               $method  HTTP method
+     * @param string|UriInterface                  $uri     URI
+     * @param (string|string[])[]                  $headers Request headers
+     * @param string|resource|StreamInterface|null $body    Request body
+     * @param string                               $version Protocol version
+     */
+    public function __construct(
+        string $method,
+        $uri,
+        array $headers = [],
+        $body = null,
+        string $version = '1.1'
+    ) {
+        $this->assertMethod($method);
+        $this->assertProtocolVersion($version);
+
+        if (!$uri instanceof UriInterface) {
+            $uri = new Uri($uri);
+        }
+        self::getRequestTargetFromUri($uri);
+
+        $this->method = $method;
+        $this->uri = $uri;
+        $this->setHeaders($headers);
+        $this->protocol = $version;
+
+        if (!isset($this->headerNames['host'])) {
+            $this->updateHostFromUri();
+        }
+
+        if ($body !== '' && $body !== null) {
+            $this->stream = Utils::streamFor($body);
+        }
+    }
+
+    public function getRequestTarget(): string
+    {
+        if ($this->requestTarget !== null) {
+            return $this->requestTarget;
+        }
+
+        return self::getRequestTargetFromUri($this->uri);
+    }
+
+    public function withRequestTarget(string $requestTarget): RequestInterface
+    {
+        self::assertRequestTarget($requestTarget);
+
+        $new = clone $this;
+        $new->requestTarget = $requestTarget;
+
+        return $new;
+    }
+
+    public function getMethod(): string
+    {
+        return $this->method;
+    }
+
+    public function withMethod(string $method): RequestInterface
+    {
+        $this->assertMethod($method);
+        $new = clone $this;
+        $new->method = $method;
+
+        return $new;
+    }
+
+    public function getUri(): UriInterface
+    {
+        return $this->uri;
+    }
+
+    public function withUri(UriInterface $uri, bool $preserveHost = false): RequestInterface
+    {
+        if ($uri === $this->uri) {
+            return $this;
+        }
+
+        if ($this->requestTarget === null) {
+            self::getRequestTargetFromUri($uri);
+        }
+
+        $new = clone $this;
+        $new->uri = $uri;
+
+        if (!$preserveHost || !isset($this->headerNames['host'])) {
+            $new->updateHostFromUri();
+        }
+
+        return $new;
+    }
+
+    private function updateHostFromUri(): void
+    {
+        $host = $this->uri->getHost();
+
+        if ($host == '') {
+            return;
+        }
+
+        Uri::assertValidHost($host);
+
+        if (($port = $this->uri->getPort()) !== null) {
+            $host .= ':'.$port;
+        }
+
+        $this->assertValue($host);
+
+        if (isset($this->headerNames['host'])) {
+            $header = $this->headerNames['host'];
+        } else {
+            $header = 'Host';
+            $this->headerNames['host'] = 'Host';
+        }
+        // Ensure Host is the first header.
+        // See: https://datatracker.ietf.org/doc/html/rfc7230#section-5.4
+        $this->headers = [$header => [$host]] + $this->headers;
+    }
+
+    private function assertMethod(string $method): void
+    {
+        if (!preg_match('/^[!#$%&\'*+.^_`|~0-9A-Za-z-]+$/D', $method)) {
+            throw new InvalidArgumentException('Method must be a valid HTTP token.');
+        }
+    }
+
+    private static function getRequestTargetFromUri(UriInterface $uri): string
+    {
+        $target = self::normalizePathForOriginForm($uri->getPath());
+        if ($target === '') {
+            $target = '/';
+        }
+        if ($uri->getQuery() != '') {
+            $target .= '?'.$uri->getQuery();
+        }
+
+        self::assertRequestTarget($target);
+
+        return $target;
+    }
+
+    private static function assertRequestTarget(string $requestTarget): void
+    {
+        if ($requestTarget === '' || preg_match('/[\x00-\x20\x7F]/', $requestTarget)) {
+            throw new InvalidArgumentException(
+                'Invalid request target provided; cannot be empty or contain whitespace or control characters'
+            );
+        }
+    }
+
+    private static function normalizePathForOriginForm(string $path): string
+    {
+        if (isset($path[1]) && $path[0] === '/' && $path[1] === '/') {
+            return '/'.ltrim($path, '/');
+        }
+
+        return $path;
+    }
+}
