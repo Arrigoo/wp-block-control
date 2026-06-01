@@ -14,11 +14,16 @@ final class LazyOpenStream implements StreamInterface
 {
     use StreamDecoratorTrait;
 
-    private string $filename;
+    /** @var string */
+    private $filename;
 
-    private string $mode;
+    /** @var string */
+    private $mode;
 
-    private StreamInterface $stream;
+    /**
+     * @var StreamInterface
+     */
+    private $stream;
 
     /**
      * @param string $filename File to lazily open

@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 namespace GuzzleHttp\Psr7;
 
-use GuzzleHttp\Psr7\Exception\TimeoutException;
 use Psr\Http\Message\StreamInterface;
 
 /**
@@ -15,13 +14,16 @@ use Psr\Http\Message\StreamInterface;
 final class AppendStream implements StreamInterface
 {
     /** @var StreamInterface[] Streams being decorated */
-    private array $streams = [];
+    private $streams = [];
 
-    private bool $seekable = true;
+    /** @var bool */
+    private $seekable = true;
 
-    private int $current = 0;
+    /** @var int */
+    private $current = 0;
 
-    private int $pos = 0;
+    /** @var int */
+    private $pos = 0;
 
     /**
      * @param StreamInterface[] $streams Streams to decorate. Each stream must
@@ -36,9 +38,18 @@ final class AppendStream implements StreamInterface
 
     public function __toString(): string
     {
-        $this->rewind();
+        try {
+            $this->rewind();
 
-        return $this->getContents();
+            return $this->getContents();
+        } catch (\Throwable $e) {
+            if (\PHP_VERSION_ID >= 70400) {
+                throw $e;
+            }
+            trigger_error(sprintf('%s::__toString exception: %s', self::class, (string) $e), E_USER_ERROR);
+
+            return '';
+        }
     }
 
     /**
@@ -142,8 +153,26 @@ final class AppendStream implements StreamInterface
     /**
      * Attempts to seek to the given position. Only supports SEEK_SET.
      */
-    public function seek(int $offset, int $whence = SEEK_SET): void
+    public function seek($offset, $whence = SEEK_SET): void
     {
+        if (!\is_int($offset)) {
+            \trigger_deprecation(
+                'guzzlehttp/psr7',
+                '2.11',
+                'Passing %s to StreamInterface::seek() is deprecated; guzzlehttp/psr7 3.0 requires int for $offset.',
+                \get_debug_type($offset)
+            );
+        }
+
+        if (!\is_int($whence)) {
+            \trigger_deprecation(
+                'guzzlehttp/psr7',
+                '2.11',
+                'Passing %s to StreamInterface::seek() is deprecated; guzzlehttp/psr7 3.0 requires int for $whence.',
+                \get_debug_type($whence)
+            );
+        }
+
         if (!$this->seekable) {
             throw new \RuntimeException('This AppendStream is not seekable');
         } elseif ($whence !== SEEK_SET) {
@@ -174,8 +203,21 @@ final class AppendStream implements StreamInterface
     /**
      * Reads from all of the appended streams until the length is met or EOF.
      */
-    public function read(int $length): string
+    public function read($length): string
     {
+        if (!\is_int($length)) {
+            \trigger_deprecation(
+                'guzzlehttp/psr7',
+                '2.11',
+                'Passing %s to StreamInterface::read() is deprecated; guzzlehttp/psr7 3.0 requires int for $length.',
+                \get_debug_type($length)
+            );
+        }
+
+        if ($this->streams === []) {
+            return '';
+        }
+
         $buffer = '';
         $total = count($this->streams) - 1;
         $remaining = $length;
@@ -191,23 +233,9 @@ final class AppendStream implements StreamInterface
                 ++$this->current;
             }
 
-            try {
-                $result = $this->streams[$this->current]->read($remaining);
-            } catch (TimeoutException $e) {
-                throw $e;
-            } catch (\RuntimeException $e) {
-                if (StreamTimeout::isReadTimedOut($this->streams[$this->current])) {
-                    throw new TimeoutException('Unable to read from stream: timed out', 0, $e);
-                }
-
-                throw $e;
-            }
+            $result = $this->streams[$this->current]->read($remaining);
 
             if ($result === '') {
-                if (StreamTimeout::isReadTimedOut($this->streams[$this->current])) {
-                    throw new TimeoutException('Unable to read from stream: timed out');
-                }
-
                 $progressToNext = true;
                 continue;
             }
@@ -236,13 +264,34 @@ final class AppendStream implements StreamInterface
         return $this->seekable;
     }
 
-    public function write(string $string): int
+    public function write($string): int
     {
+        if (!\is_string($string)) {
+            \trigger_deprecation(
+                'guzzlehttp/psr7',
+                '2.11',
+                'Passing %s to StreamInterface::write() is deprecated; guzzlehttp/psr7 3.0 requires string for $string.',
+                \get_debug_type($string)
+            );
+        }
+
         throw new \RuntimeException('Cannot write to an AppendStream');
     }
 
-    public function getMetadata(?string $key = null): ?array
+    /**
+     * @return mixed
+     */
+    public function getMetadata($key = null)
     {
-        return $key === null ? [] : null;
+        if ($key !== null && !\is_string($key)) {
+            \trigger_deprecation(
+                'guzzlehttp/psr7',
+                '2.11',
+                'Passing %s to StreamInterface::getMetadata() is deprecated; guzzlehttp/psr7 3.0 requires string|null for $key.',
+                \get_debug_type($key)
+            );
+        }
+
+        return $key ? null : [];
     }
 }

@@ -9,10 +9,6 @@ namespace GuzzleHttp\Psr7;
  */
 final class Rfc7230
 {
-    private function __construct()
-    {
-    }
-
     /**
      * Header related regular expressions (based on amphp/http package)
      *
@@ -63,11 +59,31 @@ final class Rfc7230
             }
         }
 
-        if ($host === '' || !Rfc3986::isValidHost($host)) {
+        if ($host === '' || !self::isValidHostHeaderHost($host)) {
             return null;
         }
 
         return [$host, $port];
+    }
+
+    private static function isValidHostHeaderHost(string $host): bool
+    {
+        if (preg_match('/[\x00-\x20\x7F\/\?#@\\\\]/', $host)) {
+            return false;
+        }
+
+        if (strpos($host, '[') !== false || strpos($host, ']') !== false) {
+            if ($host[0] !== '[' || substr($host, -1) !== ']') {
+                return false;
+            }
+
+            $address = substr($host, 1, -1);
+
+            return filter_var($address, \FILTER_VALIDATE_IP, \FILTER_FLAG_IPV6) !== false
+                || preg_match('/^v[0-9a-f]+\.['.Rfc3986::CHAR_UNRESERVED.Rfc3986::CHAR_SUB_DELIMS.':]+$/iD', $address) === 1;
+        }
+
+        return strpos($host, ':') === false;
     }
 
     private static function parseAuthorityPort(string $port): ?int
@@ -78,7 +94,7 @@ final class Rfc7230
 
         $normalized = ltrim($port, '0');
         if ($normalized === '') {
-            return null;
+            return 0;
         }
 
         if (strlen($normalized) > 5 || (int) $normalized > 0xFFFF) {

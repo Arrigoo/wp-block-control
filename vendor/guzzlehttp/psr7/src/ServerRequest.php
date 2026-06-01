@@ -26,20 +26,35 @@ use Psr\Http\Message\UriInterface;
  */
 class ServerRequest extends Request implements ServerRequestInterface
 {
-    private array $attributes = [];
+    /**
+     * @var array
+     */
+    private $attributes = [];
 
-    private array $cookieParams = [];
+    /**
+     * @var array
+     */
+    private $cookieParams = [];
 
     /**
      * @var array|object|null
      */
     private $parsedBody;
 
-    private array $queryParams = [];
+    /**
+     * @var array
+     */
+    private $queryParams = [];
 
-    private array $serverParams;
+    /**
+     * @var array
+     */
+    private $serverParams;
 
-    private array $uploadedFiles = [];
+    /**
+     * @var array
+     */
+    private $uploadedFiles = [];
 
     /**
      * @param string                               $method       HTTP method
@@ -76,7 +91,7 @@ class ServerRequest extends Request implements ServerRequestInterface
         foreach ($files as $key => $value) {
             if ($value instanceof UploadedFileInterface) {
                 $normalized[$key] = $value;
-            } elseif (is_array($value) && array_key_exists('tmp_name', $value)) {
+            } elseif (is_array($value) && isset($value['tmp_name'])) {
                 $normalized[$key] = self::createUploadedFileFromSpec($value);
             } elseif (is_array($value)) {
                 $normalized[$key] = self::normalizeFiles($value);
@@ -101,8 +116,6 @@ class ServerRequest extends Request implements ServerRequestInterface
      */
     private static function createUploadedFileFromSpec(array $value)
     {
-        self::assertFileSpec($value);
-
         if (is_array($value['tmp_name'])) {
             return self::normalizeNestedFileSpec($value);
         }
@@ -111,18 +124,9 @@ class ServerRequest extends Request implements ServerRequestInterface
             $value['tmp_name'],
             (int) $value['size'],
             (int) $value['error'],
-            $value['name'] ?? null,
-            $value['type'] ?? null
+            $value['name'],
+            $value['type']
         );
-    }
-
-    private static function assertFileSpec(array $value): void
-    {
-        if (!isset($value['tmp_name'], $value['size'], $value['error'])) {
-            throw new InvalidArgumentException(
-                'Invalid file specification; expected keys "tmp_name", "size", and "error".'
-            );
-        }
     }
 
     /**
@@ -135,21 +139,13 @@ class ServerRequest extends Request implements ServerRequestInterface
      */
     private static function normalizeNestedFileSpec(array $files = []): array
     {
-        self::assertNestedFileSpec($files);
-
         $normalizedFiles = [];
 
         foreach (array_keys($files['tmp_name']) as $key) {
-            if (!array_key_exists($key, $files['size']) || !array_key_exists($key, $files['error'])) {
-                throw new InvalidArgumentException(
-                    'Invalid nested file specification; expected "tmp_name", "size", and "error" arrays to have matching keys.'
-                );
-            }
-
             $spec = [
                 'tmp_name' => $files['tmp_name'][$key],
-                'size' => $files['size'][$key],
-                'error' => $files['error'][$key],
+                'size' => $files['size'][$key] ?? null,
+                'error' => $files['error'][$key] ?? null,
                 'name' => $files['name'][$key] ?? null,
                 'type' => $files['type'][$key] ?? null,
             ];
@@ -157,26 +153,6 @@ class ServerRequest extends Request implements ServerRequestInterface
         }
 
         return $normalizedFiles;
-    }
-
-    private static function assertNestedFileSpec(array $files): void
-    {
-        foreach (['tmp_name', 'size', 'error'] as $key) {
-            if (!isset($files[$key]) || !is_array($files[$key])) {
-                throw new InvalidArgumentException(
-                    'Invalid nested file specification; expected keys "tmp_name", "size", and "error" to be arrays.'
-                );
-            }
-        }
-
-        foreach (['name', 'type'] as $key) {
-            if (isset($files[$key]) && !is_array($files[$key])) {
-                throw new InvalidArgumentException(sprintf(
-                    'Invalid nested file specification; expected key "%s" to be an array when present.',
-                    $key
-                ));
-            }
-        }
     }
 
     /**
@@ -189,21 +165,14 @@ class ServerRequest extends Request implements ServerRequestInterface
      */
     public static function fromGlobals(): ServerRequestInterface
     {
-        $method = self::getRequestMethodFromGlobals();
+        $method = strtoupper(self::getServerParam('REQUEST_METHOD') ?? 'GET');
         $headers = self::removeInvalidHostHeader(self::getAllHeaders());
-        [$uri, $requestTarget] = self::getUriAndRequestTargetFromGlobals($method);
+        $uri = self::getUriFromGlobals();
         $body = new CachingStream(new LazyOpenStream('php://input', 'r+'));
         $serverProtocol = self::getServerParam('SERVER_PROTOCOL');
-        $protocol = '1.1';
-        if ($serverProtocol !== null) {
-            $protocol = strpos($serverProtocol, 'HTTP/') === 0 ? substr($serverProtocol, 5) : $serverProtocol;
-        }
+        $protocol = $serverProtocol !== null ? str_replace('HTTP/', '', $serverProtocol) : '1.1';
 
         $serverRequest = new ServerRequest($method, $uri, $headers, $body, $protocol, $_SERVER);
-        if ($requestTarget !== null) {
-            /** @var ServerRequestInterface $serverRequest */
-            $serverRequest = $serverRequest->withRequestTarget($requestTarget);
-        }
 
         return $serverRequest
             ->withCookieParams($_COOKIE)
@@ -217,25 +186,7 @@ class ServerRequest extends Request implements ServerRequestInterface
      */
     private static function getAllHeaders(): array
     {
-        $headers = self::getApacheRequestHeaders();
-
-        if (!is_array($headers)) {
-            $headers = self::getHeadersFromServer($_SERVER);
-        }
-
-        return self::normalizeHeaderValues($headers);
-    }
-
-    /**
-     * @return mixed
-     */
-    private static function getApacheRequestHeaders()
-    {
-        if (!\function_exists('apache_request_headers')) {
-            return false;
-        }
-
-        return \apache_request_headers();
+        return self::normalizeHeaderValues(getallheaders());
     }
 
     /**
@@ -256,59 +207,9 @@ class ServerRequest extends Request implements ServerRequestInterface
         return $normalized;
     }
 
-    /**
-     * @param array $server Typically the $_SERVER superglobal
-     *
-     * @return array<array-key, string>
-     */
-    private static function getHeadersFromServer(array $server): array
+    private static function getServerParam(string $key): ?string
     {
-        $headers = [];
-
-        $copyServer = [
-            'CONTENT_TYPE' => 'Content-Type',
-            'CONTENT_LENGTH' => 'Content-Length',
-            'CONTENT_MD5' => 'Content-Md5',
-        ];
-
-        foreach ($server as $key => $value) {
-            if (!is_string($key) || !is_string($value)) {
-                continue;
-            }
-
-            if (substr($key, 0, 5) === 'HTTP_') {
-                $header = substr($key, 5);
-
-                if (isset($copyServer[$header], $server[$header]) && is_string($server[$header])) {
-                    continue;
-                }
-
-                $header = str_replace(' ', '-', ucwords(strtolower(str_replace('_', ' ', $header))));
-                $headers[$header] = $value;
-
-                continue;
-            }
-
-            if (isset($copyServer[$key])) {
-                $headers[$copyServer[$key]] = $value;
-            }
-        }
-
-        if (!isset($headers['Authorization'])) {
-            if (isset($server['REDIRECT_HTTP_AUTHORIZATION']) && is_string($server['REDIRECT_HTTP_AUTHORIZATION'])) {
-                $headers['Authorization'] = $server['REDIRECT_HTTP_AUTHORIZATION'];
-            } elseif (isset($server['PHP_AUTH_USER']) && is_string($server['PHP_AUTH_USER'])) {
-                $password = isset($server['PHP_AUTH_PW']) && is_string($server['PHP_AUTH_PW'])
-                    ? $server['PHP_AUTH_PW']
-                    : '';
-
-                $headers['Authorization'] = 'Basic '.base64_encode($server['PHP_AUTH_USER'].':'.$password);
-            } elseif (isset($server['PHP_AUTH_DIGEST']) && is_string($server['PHP_AUTH_DIGEST'])) {
-                $headers['Authorization'] = $server['PHP_AUTH_DIGEST'];
-            }
-        }
-
-        return $headers;
+        return isset($_SERVER[$key]) && is_string($_SERVER[$key]) ? $_SERVER[$key] : null;
     }
 
     /**
@@ -323,23 +224,12 @@ class ServerRequest extends Request implements ServerRequestInterface
                 continue;
             }
 
-            [$host] = self::extractHostAndPortFromAuthority($value);
-            if ($host === null) {
+            if (Rfc7230::parseHostHeader($value) === null) {
                 unset($headers[$name]);
             }
         }
 
         return $headers;
-    }
-
-    private static function getServerParam(string $key): ?string
-    {
-        return isset($_SERVER[$key]) && is_string($_SERVER[$key]) ? $_SERVER[$key] : null;
-    }
-
-    private static function getRequestMethodFromGlobals(): string
-    {
-        return strtoupper(self::getServerParam('REQUEST_METHOD') ?? 'GET');
     }
 
     /**
@@ -350,38 +240,10 @@ class ServerRequest extends Request implements ServerRequestInterface
         return Rfc7230::parseHostHeader($authority) ?? [null, null];
     }
 
-    private static function parseServerPort(string $port): int
-    {
-        if ($port === '' || !ctype_digit($port)) {
-            throw new InvalidArgumentException('Invalid SERVER_PORT; expected an integer between 1 and 65535.');
-        }
-
-        $port = ltrim($port, '0');
-        if ($port === '') {
-            throw new InvalidArgumentException('Invalid SERVER_PORT; expected an integer between 1 and 65535.');
-        }
-
-        if (strlen($port) > 5 || (int) $port > 0xFFFF) {
-            throw new InvalidArgumentException('Invalid SERVER_PORT; expected an integer between 1 and 65535.');
-        }
-
-        return (int) $port;
-    }
-
-    private static function withHostFromGlobals(UriInterface $uri, ?string $host): ?UriInterface
-    {
-        if ($host === null) {
-            return null;
-        }
-
-        try {
-            return $uri->withHost($host);
-        } catch (InvalidArgumentException $e) {
-            return null;
-        }
-    }
-
-    private static function getAuthorityUriFromGlobals(): UriInterface
+    /**
+     * Get a Uri populated with values from $_SERVER.
+     */
+    public static function getUriFromGlobals(): UriInterface
     {
         $uri = new Uri('');
 
@@ -389,166 +251,45 @@ class ServerRequest extends Request implements ServerRequestInterface
         $uri = $uri->withScheme(!empty($https) && $https !== 'off' ? 'https' : 'http');
 
         $hasPort = false;
-        $hasHost = false;
         $authority = self::getServerParam('HTTP_HOST');
         if ($authority !== null) {
             [$host, $port] = self::extractHostAndPortFromAuthority($authority);
             if ($host !== null) {
-                $hostUri = self::withHostFromGlobals($uri, $host);
-                if ($hostUri !== null) {
-                    $uri = $hostUri;
-                    $hasHost = true;
-
-                    if ($port !== null) {
-                        $hasPort = true;
-                        $uri = $uri->withPort($port);
-                    }
-                }
-            }
-        }
-
-        foreach (['SERVER_NAME', 'SERVER_ADDR'] as $serverParam) {
-            if ($hasHost) {
-                continue;
+                $uri = $uri->withHost($host);
             }
 
-            $hostUri = self::withHostFromGlobals($uri, self::getServerParam($serverParam));
-            if ($hostUri !== null) {
-                $uri = $hostUri;
-                $hasHost = true;
+            if ($port !== null) {
+                $hasPort = true;
+                $uri = $uri->withPort($port);
             }
+        } elseif (($serverName = self::getServerParam('SERVER_NAME')) !== null) {
+            $uri = $uri->withHost($serverName);
+        } elseif (($serverAddr = self::getServerParam('SERVER_ADDR')) !== null) {
+            $uri = $uri->withHost($serverAddr);
         }
 
         $serverPort = self::getServerParam('SERVER_PORT');
-        if (!$hasPort && $serverPort !== null) {
-            $uri = $uri->withPort(self::parseServerPort($serverPort));
+        if (!$hasPort && $serverPort !== null && preg_match('/^[+-]?\d+$/', $serverPort) === 1) {
+            $uri = $uri->withPort((int) $serverPort);
         }
 
-        return $uri;
-    }
-
-    /**
-     * @return array{0: UriInterface, 1: string|null}
-     */
-    private static function getUriAndRequestTargetFromGlobals(string $method): array
-    {
-        $uri = self::getAuthorityUriFromGlobals();
+        $hasQuery = false;
         $requestUri = self::getServerParam('REQUEST_URI');
+        if ($requestUri !== null) {
+            $requestUriParts = explode('?', $requestUri, 2);
+            $uri = $uri->withPath($requestUriParts[0]);
+            if (isset($requestUriParts[1])) {
+                $hasQuery = true;
+                $uri = $uri->withQuery($requestUriParts[1]);
+            }
+        }
+
         $queryString = self::getServerParam('QUERY_STRING');
-
-        if ($requestUri === null) {
-            if ($queryString !== null) {
-                $uri = $uri->withQuery($queryString);
-            }
-
-            return [$uri, null];
-        }
-
-        if (self::isAsteriskFormRequestTarget($method, $requestUri)) {
-            return [$uri->withPath('')->withQuery(''), '*'];
-        }
-
-        $connectAuthority = self::parseConnectAuthorityFormRequestTarget($method, $requestUri);
-        if ($connectAuthority !== null) {
-            [$host, $port] = $connectAuthority;
-
-            return [
-                $uri->withHost($host)->withPort($port)->withPath('')->withQuery(''),
-                $requestUri,
-            ];
-        }
-
-        if (self::isAbsoluteFormRequestTarget($requestUri)) {
-            try {
-                $targetUri = (new Uri($requestUri))->withFragment('');
-            } catch (InvalidArgumentException $e) {
-                $targetUri = null;
-            }
-
-            if ($targetUri !== null && $targetUri->getHost() !== '') {
-                $requestTarget = self::removeRequestTargetFragment($requestUri);
-                if (strpos($requestTarget, '?') === false && $queryString !== null && $queryString !== '') {
-                    $targetUri = $targetUri->withQuery($queryString);
-                    $requestTarget .= '?'.$queryString;
-                }
-
-                // Preserve the received absolute-form target unless it cannot be used
-                // as a PSR-7 request target without normalization.
-                return [$targetUri, preg_match('/[\x00-\x20\x7F]/', $requestTarget) ? (string) $targetUri : $requestTarget];
-            }
-        }
-
-        [$path, $query, $hasQuery] = self::splitRequestTargetQuery($requestUri);
-        $uri = $uri->withPath(self::normalizeOriginFormPathFromGlobals($path));
-
-        if ($hasQuery) {
-            $uri = $uri->withQuery($query);
-        } elseif ($queryString !== null) {
+        if (!$hasQuery && $queryString !== null) {
             $uri = $uri->withQuery($queryString);
         }
 
-        return [$uri, null];
-    }
-
-    private static function isAbsoluteFormRequestTarget(string $target): bool
-    {
-        return preg_match('/^[A-Za-z][A-Za-z0-9+.-]*:\/\//D', $target) === 1;
-    }
-
-    private static function isAsteriskFormRequestTarget(string $method, string $target): bool
-    {
-        return $method === 'OPTIONS' && $target === '*';
-    }
-
-    /**
-     * @return array{0: string, 1: int}|null
-     */
-    private static function parseConnectAuthorityFormRequestTarget(string $method, string $target): ?array
-    {
-        if ($method !== 'CONNECT' || strpbrk($target, '/?#') !== false) {
-            return null;
-        }
-
-        [$host, $port] = self::extractHostAndPortFromAuthority($target);
-        if ($host === null || $port === null) {
-            return null;
-        }
-
-        return [$host, $port];
-    }
-
-    private static function removeRequestTargetFragment(string $target): string
-    {
-        return explode('#', $target, 2)[0];
-    }
-
-    /**
-     * @return array{0: string, 1: string, 2: bool}
-     */
-    private static function splitRequestTargetQuery(string $target): array
-    {
-        $parts = explode('?', $target, 2);
-
-        return [$parts[0], $parts[1] ?? '', isset($parts[1])];
-    }
-
-    private static function normalizeOriginFormPathFromGlobals(string $path): string
-    {
-        if ($path === '' || $path[0] === '/') {
-            return $path;
-        }
-
-        return '/'.$path;
-    }
-
-    /**
-     * Get a Uri populated with values from $_SERVER.
-     */
-    public static function getUriFromGlobals(): UriInterface
-    {
-        $method = self::getRequestMethodFromGlobals();
-
-        return self::getUriAndRequestTargetFromGlobals($method)[0];
+        return $uri;
     }
 
     public function getServerParams(): array
@@ -563,10 +304,12 @@ class ServerRequest extends Request implements ServerRequestInterface
 
     public function withUploadedFiles(array $uploadedFiles): ServerRequestInterface
     {
+        $invalidUploadedFileFound = false;
+        $invalidUploadedFile = null;
         $stack = [$uploadedFiles];
 
-        for ($i = 0; $i < \count($stack); ++$i) {
-            foreach ($stack[$i] as $uploadedFile) {
+        while ($stack !== []) {
+            foreach (\array_pop($stack) as $uploadedFile) {
                 if ($uploadedFile instanceof UploadedFileInterface) {
                     continue;
                 }
@@ -576,11 +319,20 @@ class ServerRequest extends Request implements ServerRequestInterface
                     continue;
                 }
 
-                throw new InvalidArgumentException(sprintf(
-                    'Invalid uploaded file tree; expected UploadedFileInterface instances but %s provided.',
-                    \get_debug_type($uploadedFile)
-                ));
+                $invalidUploadedFileFound = true;
+                $invalidUploadedFile = $uploadedFile;
+
+                break 2;
             }
+        }
+
+        if ($invalidUploadedFileFound) {
+            \trigger_deprecation(
+                'guzzlehttp/psr7',
+                '2.11',
+                'Passing %s inside ServerRequestInterface::withUploadedFiles() is deprecated; guzzlehttp/psr7 3.0 requires an UploadedFileInterface[] tree.',
+                \get_debug_type($invalidUploadedFile)
+            );
         }
 
         $new = clone $this;
@@ -626,7 +378,12 @@ class ServerRequest extends Request implements ServerRequestInterface
     public function withParsedBody($data): ServerRequestInterface
     {
         if ($data !== null && !\is_array($data) && !\is_object($data)) {
-            throw new InvalidArgumentException('Parsed body must be an array, object, or null.');
+            \trigger_deprecation(
+                'guzzlehttp/psr7',
+                '2.11',
+                'Passing %s to ServerRequestInterface::withParsedBody() is deprecated; guzzlehttp/psr7 3.0 requires array|object|null.',
+                \get_debug_type($data)
+            );
         }
 
         $new = clone $this;
@@ -643,31 +400,58 @@ class ServerRequest extends Request implements ServerRequestInterface
     /**
      * @return mixed
      */
-    public function getAttribute(string $name, $default = null)
+    public function getAttribute($attribute, $default = null)
     {
-        if (false === array_key_exists($name, $this->attributes)) {
+        if (!\is_string($attribute)) {
+            \trigger_deprecation(
+                'guzzlehttp/psr7',
+                '2.11',
+                'Passing %s to ServerRequestInterface::getAttribute() is deprecated; guzzlehttp/psr7 3.0 requires string for $attribute.',
+                \get_debug_type($attribute)
+            );
+        }
+
+        if (false === array_key_exists($attribute, $this->attributes)) {
             return $default;
         }
 
-        return $this->attributes[$name];
+        return $this->attributes[$attribute];
     }
 
-    public function withAttribute(string $name, $value): ServerRequestInterface
+    public function withAttribute($attribute, $value): ServerRequestInterface
     {
+        if (!\is_string($attribute)) {
+            \trigger_deprecation(
+                'guzzlehttp/psr7',
+                '2.11',
+                'Passing %s to ServerRequestInterface::withAttribute() is deprecated; guzzlehttp/psr7 3.0 requires string for $attribute.',
+                \get_debug_type($attribute)
+            );
+        }
+
         $new = clone $this;
-        $new->attributes[$name] = $value;
+        $new->attributes[$attribute] = $value;
 
         return $new;
     }
 
-    public function withoutAttribute(string $name): ServerRequestInterface
+    public function withoutAttribute($attribute): ServerRequestInterface
     {
-        if (false === array_key_exists($name, $this->attributes)) {
+        if (!\is_string($attribute)) {
+            \trigger_deprecation(
+                'guzzlehttp/psr7',
+                '2.11',
+                'Passing %s to ServerRequestInterface::withoutAttribute() is deprecated; guzzlehttp/psr7 3.0 requires string for $attribute.',
+                \get_debug_type($attribute)
+            );
+        }
+
+        if (false === array_key_exists($attribute, $this->attributes)) {
             return $this;
         }
 
         $new = clone $this;
-        unset($new->attributes[$name]);
+        unset($new->attributes[$attribute]);
 
         return $new;
     }

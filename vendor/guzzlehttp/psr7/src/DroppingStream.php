@@ -14,9 +14,11 @@ final class DroppingStream implements StreamInterface
 {
     use StreamDecoratorTrait;
 
-    private int $maxLength;
+    /** @var int */
+    private $maxLength;
 
-    private StreamInterface $stream;
+    /** @var StreamInterface */
+    private $stream;
 
     /**
      * @param StreamInterface $stream    Underlying stream to decorate.
@@ -28,8 +30,17 @@ final class DroppingStream implements StreamInterface
         $this->maxLength = $maxLength;
     }
 
-    public function write(string $string): int
+    public function write($string): int
     {
+        if (!\is_string($string)) {
+            \trigger_deprecation(
+                'guzzlehttp/psr7',
+                '2.11',
+                'Passing %s to StreamInterface::write() is deprecated; guzzlehttp/psr7 3.0 requires string for $string.',
+                \get_debug_type($string)
+            );
+        }
+
         $diff = $this->maxLength - $this->stream->getSize();
 
         // Begin returning 0 when the underlying stream is too large.

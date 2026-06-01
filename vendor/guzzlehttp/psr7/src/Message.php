@@ -10,10 +10,6 @@ use Psr\Http\Message\ResponseInterface;
 
 final class Message
 {
-    private function __construct()
-    {
-    }
-
     /**
      * Returns the string representation of an HTTP message.
      *
@@ -245,28 +241,9 @@ final class Message
             return $path;
         }
 
-        [$authorityHost, $port] = self::parseHostHeaderAuthority($host);
-        $scheme = $port === 443 ? 'https' : 'http';
+        $scheme = substr($host, -4) === ':443' ? 'https' : 'http';
 
-        return $scheme.'://'.self::composeAuthority($authorityHost, $port).'/'.ltrim($path, '/');
-    }
-
-    /**
-     * @return array{0: string, 1: int|null}
-     */
-    private static function parseHostHeaderAuthority(string $authority): array
-    {
-        $parsed = Rfc7230::parseHostHeader($authority);
-        if ($parsed === null) {
-            throw new \InvalidArgumentException('Invalid request string');
-        }
-
-        return $parsed;
-    }
-
-    private static function composeAuthority(string $host, ?int $port): string
-    {
-        return $host.($port !== null ? ':'.$port : '');
+        return $scheme.'://'.$host.'/'.ltrim($path, '/');
     }
 
     /**
@@ -274,62 +251,23 @@ final class Message
      */
     private static function getHostFromHeaders(array $headers): ?string
     {
-        $host = self::getSingleHostHeader($headers);
-        if ($host === null) {
+        $hostKey = array_filter(array_keys($headers), function ($k) {
+            // Numeric array keys are converted to int by PHP.
+            $k = (string) $k;
+
+            return strtolower($k) === 'host';
+        });
+
+        if (!$hostKey) {
             return null;
         }
 
-        self::parseHostHeaderAuthority($host);
-
-        return $host;
-    }
-
-    /**
-     * @param array $headers Array of headers (each value an array).
-     */
-    private static function getSingleHostHeader(array $headers): ?string
-    {
-        $host = null;
-        $found = false;
-
-        foreach ($headers as $name => $values) {
-            if (strtolower((string) $name) !== 'host') {
-                continue;
-            }
-
-            if ($found || !is_array($values) || count($values) !== 1) {
-                throw new \InvalidArgumentException('Invalid request string');
-            }
-
-            $found = true;
-            $host = reset($values);
-        }
-
-        if (!$found) {
-            return null;
-        }
-
-        if (!is_string($host)) {
+        $host = $headers[reset($hostKey)][0];
+        if (!is_string($host) || Rfc7230::parseHostHeader($host) === null) {
             throw new \InvalidArgumentException('Invalid request string');
         }
 
         return $host;
-    }
-
-    /**
-     * @param array $headers Array of headers (each value an array).
-     */
-    private static function parseRequestAuthorityUri(array $headers): string
-    {
-        $host = self::getHostFromHeaders($headers);
-        if ($host === null) {
-            return '';
-        }
-
-        [$authorityHost, $port] = self::parseHostHeaderAuthority($host);
-        $scheme = $port === 443 ? 'https' : 'http';
-
-        return $scheme.'://'.self::composeAuthority($authorityHost, $port);
     }
 
     /**
@@ -341,87 +279,21 @@ final class Message
     {
         $data = self::parseMessage($message);
         $matches = [];
-        if (!preg_match('/^(?P<method>[!#$%&\'*+.^_`|~0-9A-Za-z-]+) (?P<target>[^\x00-\x20\x7F]+) HTTP\/(?P<version>\d+(?:\.\d+)?)$/D', $data['start-line'], $matches)) {
+        if (!preg_match('/^[\S]+\s+([a-zA-Z]+:\/\/|\/).*/', $data['start-line'], $matches)) {
             throw new \InvalidArgumentException('Invalid request string');
         }
+        $parts = explode(' ', $data['start-line'], 3);
+        $version = isset($parts[2]) ? explode('/', $parts[2])[1] : '1.1';
 
-        self::getSingleHostHeader($data['headers']);
+        $request = new Request(
+            $parts[0],
+            $matches[1] === '/' ? self::parseRequestUri($parts[1], $data['headers']) : $parts[1],
+            $data['headers'],
+            $data['body'],
+            $version
+        );
 
-        if ($matches['target'][0] === '/') {
-            return new Request(
-                $matches['method'],
-                self::parseRequestUri($matches['target'], $data['headers']),
-                $data['headers'],
-                $data['body'],
-                $matches['version']
-            );
-        }
-
-        if (self::isAbsoluteFormRequestTarget($matches['target'])) {
-            return (new Request(
-                $matches['method'],
-                $matches['target'],
-                $data['headers'],
-                $data['body'],
-                $matches['version']
-            ))->withRequestTarget($matches['target']);
-        }
-
-        if (self::isAsteriskFormRequestTarget($matches['method'], $matches['target'])) {
-            return (new Request(
-                $matches['method'],
-                self::parseRequestAuthorityUri($data['headers']),
-                $data['headers'],
-                $data['body'],
-                $matches['version']
-            ))->withRequestTarget($matches['target']);
-        }
-
-        $connectUri = self::parseConnectAuthorityFormRequestTarget($matches['method'], $matches['target']);
-        if ($connectUri !== null) {
-            return (new Request(
-                $matches['method'],
-                $connectUri,
-                $data['headers'],
-                $data['body'],
-                $matches['version']
-            ))->withRequestTarget($matches['target']);
-        }
-
-        throw new \InvalidArgumentException('Invalid request string');
-    }
-
-    private static function isAbsoluteFormRequestTarget(string $target): bool
-    {
-        return preg_match('/^[A-Za-z][A-Za-z0-9+.-]*:\/\//D', $target) === 1;
-    }
-
-    private static function isAsteriskFormRequestTarget(string $method, string $target): bool
-    {
-        return $method === 'OPTIONS' && $target === '*';
-    }
-
-    private static function parseConnectAuthorityFormRequestTarget(string $method, string $target): ?Uri
-    {
-        if ($method !== 'CONNECT' || strpbrk($target, '/?#') !== false) {
-            return null;
-        }
-
-        $parsed = Rfc7230::parseHostHeader($target);
-        if ($parsed === null) {
-            return null;
-        }
-
-        [$host, $port] = $parsed;
-        if ($port === null) {
-            return null;
-        }
-
-        try {
-            return new Uri('//'.self::composeAuthority($host, $port));
-        } catch (\InvalidArgumentException $e) {
-            return null;
-        }
+        return $matches[1] === '/' ? $request : $request->withRequestTarget($parts[1]);
     }
 
     /**
@@ -435,16 +307,17 @@ final class Message
         // According to https://datatracker.ietf.org/doc/html/rfc7230#section-3.1.2
         // the space between status-code and reason-phrase is required. But
         // browsers accept responses without space and reason as well.
-        if (!preg_match('/^HTTP\/(?P<version>\d+(?:\.\d+)?) (?P<status>[1-5][0-9]{2})(?: (?P<reason>[\x09\x20-\x7E\x80-\xFF]*))?$/D', $data['start-line'], $matches)) {
+        if (!preg_match('/^HTTP\/.* [0-9]{3}( .*|$)/', $data['start-line'])) {
             throw new \InvalidArgumentException('Invalid response string: '.$data['start-line']);
         }
+        $parts = explode(' ', $data['start-line'], 3);
 
         return new Response(
-            (int) $matches['status'],
+            (int) $parts[1],
             $data['headers'],
             $data['body'],
-            $matches['version'],
-            $matches['reason'] ?? null
+            explode('/', $parts[0])[1],
+            $parts[2] ?? null
         );
     }
 }

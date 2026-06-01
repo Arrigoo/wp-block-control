@@ -184,6 +184,18 @@ class AdminSettings {
             );
         }
 
+        // Handle a manual segment cache refresh.
+        if (isset($_POST['arrigoo_cdp_refresh_segments'])) {
+            check_admin_referer('arrigoo_cdp_refresh_segments');
+            delete_option('ARRIGOO_CDP');
+            add_settings_error(
+                'arrigoo_cdp_messages',
+                'arrigoo_cdp_refreshed',
+                'Segments refreshed from CDP.',
+                'updated'
+            );
+        }
+
         settings_errors('arrigoo_cdp_messages');
 
         // Fetch segments from CDP
@@ -202,6 +214,7 @@ class AdminSettings {
             <?php if (!empty($segments)): ?>
                 <div style="margin-top: 40px;">
                     <h2>Available Segments</h2>
+                    <?php self::render_refresh_segments_button(); ?>
                     <p>The following segments are currently available from your CDP:</p>
                     <table class="wp-list-table widefat fixed striped">
                         <thead>
@@ -225,12 +238,26 @@ class AdminSettings {
             <?php else: ?>
                 <div style="margin-top: 40px;">
                     <h2>Available Segments</h2>
+                    <?php self::render_refresh_segments_button(); ?>
                     <div class="notice notice-warning inline">
                         <p><strong>No segments found.</strong> Please ensure your CDP API credentials are correct and that segments are configured in your CDP.</p>
                     </div>
                 </div>
             <?php endif; ?>
         </div>
+        <?php
+    }
+
+    /**
+     * Render the "Refresh Segments" button that clears the cache and re-fetches from the CDP.
+     */
+    public static function render_refresh_segments_button() {
+        ?>
+        <form action="<?php echo esc_url(admin_url('options-general.php?page=arrigoo-cdp-settings')); ?>" method="post" style="margin-bottom: 15px;">
+            <?php wp_nonce_field('arrigoo_cdp_refresh_segments'); ?>
+            <?php submit_button('Refresh Segments', 'secondary', 'arrigoo_cdp_refresh_segments', false); ?>
+            <p class="description">Clears the local segment cache and fetches the latest segments from the CDP.</p>
+        </form>
         <?php
     }
 

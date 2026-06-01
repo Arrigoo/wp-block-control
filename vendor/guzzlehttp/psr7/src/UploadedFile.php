@@ -22,19 +22,40 @@ class UploadedFile implements UploadedFileInterface
         UPLOAD_ERR_EXTENSION => 'UPLOAD_ERR_EXTENSION',
     ];
 
-    private ?string $clientFilename;
+    /**
+     * @var string|null
+     */
+    private $clientFilename;
 
-    private ?string $clientMediaType;
+    /**
+     * @var string|null
+     */
+    private $clientMediaType;
 
-    private int $error;
+    /**
+     * @var int
+     */
+    private $error;
 
-    private ?string $file = null;
+    /**
+     * @var string|null
+     */
+    private $file;
 
-    private bool $moved = false;
+    /**
+     * @var bool
+     */
+    private $moved = false;
 
-    private ?int $size;
+    /**
+     * @var int|null
+     */
+    private $size;
 
-    private ?StreamInterface $stream = null;
+    /**
+     * @var StreamInterface|null
+     */
+    private $stream;
 
     /**
      * @param StreamInterface|string|resource $streamOrFile
@@ -92,6 +113,11 @@ class UploadedFile implements UploadedFileInterface
         $this->error = $error;
     }
 
+    private static function isStringNotEmpty($param): bool
+    {
+        return is_string($param) && false === empty($param);
+    }
+
     /**
      * Return true if there is no upload error
      */
@@ -133,11 +159,11 @@ class UploadedFile implements UploadedFileInterface
         return new LazyOpenStream($file, 'r+');
     }
 
-    public function moveTo(string $targetPath): void
+    public function moveTo($targetPath): void
     {
         $this->validateActive();
 
-        if ($targetPath === '') {
+        if (false === self::isStringNotEmpty($targetPath)) {
             throw new InvalidArgumentException(
                 'Invalid path provided for move operation; must be a non-empty string'
             );

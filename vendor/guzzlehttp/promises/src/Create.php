@@ -6,19 +6,10 @@ namespace GuzzleHttp\Promise;
 
 final class Create
 {
-    private function __construct()
-    {
-    }
-
     /**
      * Creates a promise for a value if the value is not a promise.
      *
-     * @template TValue
-     * @template TPromise of PromiseInterface<mixed, mixed> = PromiseInterface<mixed, mixed>
-     *
-     * @param TValue|TPromise $value Promise or value.
-     *
-     * @return ($value is PromiseInterface ? TPromise : FulfilledPromise<TValue, mixed>)
+     * @param mixed $value Promise or value.
      */
     public static function promiseFor($value): PromiseInterface
     {
@@ -43,13 +34,7 @@ final class Create
      * Creates a rejected promise for a reason if the reason is not a promise.
      * If the provided reason is a promise, then it is returned as-is.
      *
-     * @template TReason
-     * @template TValue = mixed
-     * @template TPromise of PromiseInterface<mixed, mixed> = PromiseInterface<mixed, mixed>
-     *
-     * @param TReason|TPromise $reason Promise or reason.
-     *
-     * @return ($reason is PromiseInterface ? TPromise : RejectedPromise<TValue, TReason>)
+     * @param mixed $reason Promise or reason.
      */
     public static function rejectionFor($reason): PromiseInterface
     {
@@ -63,9 +48,7 @@ final class Create
     /**
      * Create an exception for a rejected promise value.
      *
-     * @template TReason
-     *
-     * @param TReason $reason
+     * @param mixed $reason
      */
     public static function exceptionFor($reason): \Throwable
     {
@@ -79,14 +62,9 @@ final class Create
     /**
      * Returns an iterator for the given value.
      *
-     * @template TKey of array-key
-     * @template TValue
-     *
-     * @param iterable<TKey, TValue> $value
-     *
-     * @return \Iterator<TKey, TValue>
+     * @param mixed $value
      */
-    public static function iterFor(iterable $value): \Iterator
+    public static function iterFor($value): \Iterator
     {
         if ($value instanceof \Iterator) {
             return $value;
@@ -96,10 +74,16 @@ final class Create
             return new \ArrayIterator($value);
         }
 
-        if ($value instanceof \IteratorAggregate) {
-            return self::iterFor($value->getIterator());
+        if (!is_iterable($value)) {
+            \trigger_deprecation(
+                'guzzlehttp/promises',
+                '2.5',
+                'Passing a non-iterable to %s::%s() is deprecated; guzzlehttp/promises 3.0 will require an iterable.',
+                __CLASS__,
+                __FUNCTION__
+            );
         }
 
-        return new \IteratorIterator($value);
+        return new \ArrayIterator([$value]);
     }
 }

@@ -5,51 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/)
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## 3.0.0 - Unreleased
-
-### Added
-
-- Add `GuzzleHttp\Psr7\Exception\TimeoutException` for timed-out stream operations
-
-### Changed
-
-- Require `psr/http-message:^2.0` and add compatible native parameter and return types
-- Require `psr/http-factory:^1.1`
-- Preserve HTTP request method casing for explicitly constructed requests while continuing to uppercase `ServerRequest::fromGlobals()` methods for server-global compatibility
-- Reject empty arrays and non-string values as header values
-- Reject invalid uploaded file trees and invalid parsed body values
-- Reject malformed uploaded file specifications missing `tmp_name`, `size`, or `error`
-- Normalize multiple leading slashes to one slash in `Uri::getPath()` and URI-derived `Request::getRequestTarget()` values
-- Harden URI host validation for delimiters, backslashes, and invalid IPv6/IP literals; reject schemes not beginning with a letter
-- Redact all non-empty URI userinfo in `Utils::redactUserInfo()`
-- Reject zero-port `HTTP_HOST` authorities and malformed `SERVER_PORT` values in `ServerRequest::getUriFromGlobals()`
-- Reject zero-port `Host` authorities and normalize leading-zero ports in `Message::parseRequest()` URI derivation
-- Reject duplicate `Host` field lines in `Message::parseRequest()`
-- Normalize server request URI reconstruction from globals, including `REQUEST_METHOD` values used for request-target parsing
-- Accept `OPTIONS *` and `CONNECT` authority-form request targets in `Message::parseRequest()`
-- Reject malformed HTTP start-line fields
-- Reject hosts with embedded ports in `Uri::withHost()`
-- Validate iterator chunks passed to `Utils::streamFor()`
-- Validate unsupported values passed to `Query::build()`
-- Reject invalid `Utils::modifyRequest()` change values before applying request modifications
-- Use PHP debug type names in type error messages
-- Throw `TimeoutException` when stream read, copy, hash, and line operations detect timeout metadata
-- Stop adding default `Content-Length` headers to `multipart/form-data` parts to comply with RFC 7578 section 4.8
-- Escape generated multipart `Content-Disposition` parameters and reject unsafe multipart boundary and part header metadata
-- Made static utility classes non-instantiable
-
-### Removed
-
-- Dropped support for PHP 7.2 and 7.3
-- Removed the `ralouphie/getallheaders` dependency
-
 ## 2.11.0 - TBD
 
 ### Changed
 
-- Changed `Utils::copyToStream()` to retry short destination writes and throw when destination streams cannot make progress
 - Changed `Utils::modifyRequest()` to reject conflicting URI and `Host` header changes in the same call
 - Changed `Header::parse()` to split semicolon-separated parameters without repeated regular expression lookaheads
+- Changed `UriComparator::isCrossOrigin()` so only HTTP and HTTPS missing ports receive implicit default ports
 
 ### Deprecated
 
@@ -61,10 +23,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Deprecated relying on automatic uppercasing of explicitly provided HTTP request methods; guzzlehttp/psr7 3.0 preserves request method casing
 - Deprecated invalid `Utils::modifyRequest()` change values that guzzlehttp/psr7 3.0 will reject
 
-## 2.10.3 - Upcoming
+### Fixed
+
+- Fixed `Utils::copyToStream()` to retry short destination writes instead of dropping the unwritten remainder
+- Fixed `Header::parse()` splitting of semicolon-separated parameters with escaped quotes
+
+## 2.10.4 - 2026-05-29
 
 ### Fixed
 
+- Apply `UriNormalizer` percent-encoding normalizations to URI fragments
+- Make `LimitStream::getSize()` return `0` for slices past the underlying stream end
+- Make `AppendStream::read()` return an empty string when no streams are attached
+- Make `CachingStream::read()` throw on an incomplete cache-target write instead of silently corrupting replays
+- Prevent `CachingStream::seek()` from looping indefinitely when the remote stream makes no progress
+
+## 2.10.3 - 2026-05-27
+
+### Fixed
+
+- Fixed URI parsing for IPv6 literals containing embedded IPv4 addresses
 - Fixed malformed UTF-8 URI strings being parsed as empty URIs
 
 ## 2.10.2 - 2026-05-25

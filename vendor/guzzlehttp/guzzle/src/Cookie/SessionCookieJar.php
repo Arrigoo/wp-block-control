@@ -1,7 +1,5 @@
 <?php
 
-declare(strict_types=1);
-
 namespace GuzzleHttp\Cookie;
 
 /**
@@ -12,12 +10,12 @@ class SessionCookieJar extends CookieJar
     /**
      * @var string session key
      */
-    private string $sessionKey;
+    private $sessionKey;
 
     /**
      * @var bool Control whether to persist session cookies or not.
      */
-    private bool $storeSessionCookies;
+    private $storeSessionCookies;
 
     /**
      * Create a new SessionCookieJar object
@@ -56,12 +54,7 @@ class SessionCookieJar extends CookieJar
             }
         }
 
-        $json = \json_encode($json);
-        if (false === $json) {
-            throw new \RuntimeException('Unable to encode cookie data');
-        }
-
-        $_SESSION[$this->sessionKey] = $json;
+        $_SESSION[$this->sessionKey] = \json_encode($json);
     }
 
     /**
@@ -72,26 +65,12 @@ class SessionCookieJar extends CookieJar
         if (!isset($_SESSION[$this->sessionKey])) {
             return;
         }
-
-        $json = $_SESSION[$this->sessionKey];
-        if (!\is_string($json)) {
-            throw new \RuntimeException('Invalid cookie data');
-        }
-
-        $data = \json_decode($json, true);
+        $data = \json_decode($_SESSION[$this->sessionKey], true);
         if (\is_array($data)) {
             foreach ($data as $cookie) {
-                if (!\is_array($cookie)) {
-                    throw new \RuntimeException('Invalid cookie data');
-                }
-
-                try {
-                    $this->setCookie(new SetCookie($cookie));
-                } catch (\InvalidArgumentException $e) {
-                    throw new \RuntimeException('Invalid cookie data', 0, $e);
-                }
+                $this->setCookie(new SetCookie($cookie));
             }
-        } elseif (\is_scalar($data) && \strlen((string) $data)) {
+        } elseif (\strlen($data)) {
             throw new \RuntimeException('Invalid cookie data');
         }
     }

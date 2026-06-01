@@ -22,7 +22,7 @@ final class FnStream implements StreamInterface
     ];
 
     /** @var array<string, callable> */
-    private array $methods;
+    private $methods;
 
     /**
      * @param array<string, callable> $methods Hash of method name to a callable.
@@ -74,8 +74,10 @@ final class FnStream implements StreamInterface
      *
      * @param StreamInterface         $stream  Stream to decorate
      * @param array<string, callable> $methods Hash of method name to a callable
+     *
+     * @return FnStream
      */
-    public static function decorate(StreamInterface $stream, array $methods): self
+    public static function decorate(StreamInterface $stream, array $methods)
     {
         // If any of the required methods were not provided, then simply
         // proxy to the decorated stream.
@@ -90,8 +92,17 @@ final class FnStream implements StreamInterface
 
     public function __toString(): string
     {
-        /** @var string */
-        return ($this->_fn___toString)();
+        try {
+            /** @var string */
+            return ($this->_fn___toString)();
+        } catch (\Throwable $e) {
+            if (\PHP_VERSION_ID >= 70400) {
+                throw $e;
+            }
+            trigger_error(sprintf('%s::__toString exception: %s', self::class, (string) $e), E_USER_ERROR);
+
+            return '';
+        }
     }
 
     public function close(): void
@@ -129,8 +140,26 @@ final class FnStream implements StreamInterface
         ($this->_fn_rewind)();
     }
 
-    public function seek(int $offset, int $whence = SEEK_SET): void
+    public function seek($offset, $whence = SEEK_SET): void
     {
+        if (!\is_int($offset)) {
+            \trigger_deprecation(
+                'guzzlehttp/psr7',
+                '2.11',
+                'Passing %s to StreamInterface::seek() is deprecated; guzzlehttp/psr7 3.0 requires int for $offset.',
+                \get_debug_type($offset)
+            );
+        }
+
+        if (!\is_int($whence)) {
+            \trigger_deprecation(
+                'guzzlehttp/psr7',
+                '2.11',
+                'Passing %s to StreamInterface::seek() is deprecated; guzzlehttp/psr7 3.0 requires int for $whence.',
+                \get_debug_type($whence)
+            );
+        }
+
         ($this->_fn_seek)($offset, $whence);
     }
 
@@ -139,8 +168,17 @@ final class FnStream implements StreamInterface
         return ($this->_fn_isWritable)();
     }
 
-    public function write(string $string): int
+    public function write($string): int
     {
+        if (!\is_string($string)) {
+            \trigger_deprecation(
+                'guzzlehttp/psr7',
+                '2.11',
+                'Passing %s to StreamInterface::write() is deprecated; guzzlehttp/psr7 3.0 requires string for $string.',
+                \get_debug_type($string)
+            );
+        }
+
         return ($this->_fn_write)($string);
     }
 
@@ -149,8 +187,17 @@ final class FnStream implements StreamInterface
         return ($this->_fn_isReadable)();
     }
 
-    public function read(int $length): string
+    public function read($length): string
     {
+        if (!\is_int($length)) {
+            \trigger_deprecation(
+                'guzzlehttp/psr7',
+                '2.11',
+                'Passing %s to StreamInterface::read() is deprecated; guzzlehttp/psr7 3.0 requires int for $length.',
+                \get_debug_type($length)
+            );
+        }
+
         return ($this->_fn_read)($length);
     }
 
@@ -162,8 +209,17 @@ final class FnStream implements StreamInterface
     /**
      * @return mixed
      */
-    public function getMetadata(?string $key = null)
+    public function getMetadata($key = null)
     {
+        if ($key !== null && !\is_string($key)) {
+            \trigger_deprecation(
+                'guzzlehttp/psr7',
+                '2.11',
+                'Passing %s to StreamInterface::getMetadata() is deprecated; guzzlehttp/psr7 3.0 requires string|null for $key.',
+                \get_debug_type($key)
+            );
+        }
+
         return ($this->_fn_getMetadata)($key);
     }
 }

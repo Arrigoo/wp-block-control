@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 namespace GuzzleHttp\Psr7;
 
-use GuzzleHttp\Psr7\Exception\TimeoutException;
 use Psr\Http\Message\StreamInterface;
 
 /**
@@ -16,14 +15,18 @@ final class CachingStream implements StreamInterface
     use StreamDecoratorTrait;
 
     /** @var StreamInterface Stream being wrapped */
-    private StreamInterface $remoteStream;
+    private $remoteStream;
 
     /** @var int Number of bytes to skip reading due to a write on the buffer */
-    private int $skipReadBytes = 0;
+    private $skipReadBytes = 0;
 
-    private StreamInterface $stream;
+    /**
+     * @var StreamInterface
+     */
+    private $stream;
 
-    private bool $detached = false;
+    /** @var bool */
+    private $detached = false;
 
     /**
      * We will treat the buffer object as the body of the stream
@@ -59,8 +62,26 @@ final class CachingStream implements StreamInterface
         $this->seek(0);
     }
 
-    public function seek(int $offset, int $whence = SEEK_SET): void
+    public function seek($offset, $whence = SEEK_SET): void
     {
+        if (!\is_int($offset)) {
+            \trigger_deprecation(
+                'guzzlehttp/psr7',
+                '2.11',
+                'Passing %s to StreamInterface::seek() is deprecated; guzzlehttp/psr7 3.0 requires int for $offset.',
+                \get_debug_type($offset)
+            );
+        }
+
+        if (!\is_int($whence)) {
+            \trigger_deprecation(
+                'guzzlehttp/psr7',
+                '2.11',
+                'Passing %s to StreamInterface::seek() is deprecated; guzzlehttp/psr7 3.0 requires int for $whence.',
+                \get_debug_type($whence)
+            );
+        }
+
         if ($whence === SEEK_SET) {
             $byte = $offset;
         } elseif ($whence === SEEK_CUR) {
@@ -81,8 +102,16 @@ final class CachingStream implements StreamInterface
             // Read the remoteStream until we have read in at least the amount
             // of bytes requested, or we reach the end of the file.
             while ($diff > 0 && !$this->remoteStream->eof()) {
-                $this->read($diff);
-                $diff = $byte - $this->stream->getSize();
+                $previousSize = $this->stream->getSize();
+                $previousSkipReadBytes = $this->skipReadBytes;
+                $data = $this->read($diff);
+                $currentSize = $this->stream->getSize();
+
+                if ($data === '' && $currentSize === $previousSize && $this->skipReadBytes === $previousSkipReadBytes) {
+                    break;
+                }
+
+                $diff = $byte - $currentSize;
             }
         } else {
             // We can just do a normal seek since we've already seen this byte.
@@ -90,8 +119,17 @@ final class CachingStream implements StreamInterface
         }
     }
 
-    public function read(int $length): string
+    public function read($length): string
     {
+        if (!\is_int($length)) {
+            \trigger_deprecation(
+                'guzzlehttp/psr7',
+                '2.11',
+                'Passing %s to StreamInterface::read() is deprecated; guzzlehttp/psr7 3.0 requires int for $length.',
+                \get_debug_type($length)
+            );
+        }
+
         // Perform a regular read on any previously read data from the buffer
         $data = $this->stream->read($length);
         $remaining = $length - strlen($data);
@@ -102,23 +140,9 @@ final class CachingStream implements StreamInterface
             // been filled from the remote stream, then we must skip bytes on
             // the remote stream to emulate overwriting bytes from that
             // position. This mimics the behavior of other PHP stream wrappers.
-            try {
-                $remoteData = $this->remoteStream->read(
-                    $remaining + $this->skipReadBytes
-                );
-            } catch (TimeoutException $e) {
-                throw $e;
-            } catch (\RuntimeException $e) {
-                if (StreamTimeout::isReadTimedOut($this->remoteStream)) {
-                    throw new TimeoutException('Unable to read from stream: timed out', 0, $e);
-                }
-
-                throw $e;
-            }
-
-            if ($remoteData === '' && StreamTimeout::isReadTimedOut($this->remoteStream)) {
-                throw new TimeoutException('Unable to read from stream: timed out');
-            }
+            $remoteData = $this->remoteStream->read(
+                $remaining + $this->skipReadBytes
+            );
 
             if ($this->skipReadBytes) {
                 $len = strlen($remoteData);
@@ -127,14 +151,27 @@ final class CachingStream implements StreamInterface
             }
 
             $data .= $remoteData;
-            $this->stream->write($remoteData);
+
+            // A short cache write would silently corrupt later replays, so fail loudly.
+            if ($this->stream->write($remoteData) !== strlen($remoteData)) {
+                throw new \RuntimeException('Unable to cache the entire read from the remote stream');
+            }
         }
 
         return $data;
     }
 
-    public function write(string $string): int
+    public function write($string): int
     {
+        if (!\is_string($string)) {
+            \trigger_deprecation(
+                'guzzlehttp/psr7',
+                '2.11',
+                'Passing %s to StreamInterface::write() is deprecated; guzzlehttp/psr7 3.0 requires string for $string.',
+                \get_debug_type($string)
+            );
+        }
+
         // When appending to the end of the currently read stream, you'll want
         // to skip bytes from being read from the remote stream to emulate
         // other stream wrappers. Basically replacing bytes of data of a fixed

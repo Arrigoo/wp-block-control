@@ -3,183 +3,6 @@
 Please refer to [UPGRADING](UPGRADING.md) guide for upgrading to a major version.
 
 
-## 8.0.0 - Upcoming
-
-### Added
-
-- Add HTTP/3 request support to the built-in cURL handlers when PHP 8.4+ and libcurl provide HTTP/3 support
-- Add generic and structured PHPDoc annotations to client request/config option, async promise, handler, middleware, pool, and mock handler APIs
-- Add CIDR notation support for IP no-proxy rules
-- Add network and timeout exception types
-- Add PSR-17 `request_factory`, `stream_factory`, and `uri_factory` request options for client-created requests, request body streams, and URIs
-- Add explicit `close()` lifecycle methods to the built-in cURL handlers and concrete cURL factory
-- Add `HandlerClosedException` for pending transfers rejected by `CurlMultiHandler::close()`
-- Add `ProxyOptions` for proxy option resolution
-
-### Changed
-
-- Hardened `FileCookieJar` persistence against unsafe unserialization
-- Adjusted `guzzlehttp/promises` version constraint to `^3.0`
-- Adjusted `guzzlehttp/psr7` version constraint to `^3.0`
-- Quote multipart `Content-Type` boundary parameters when required
-- Added parameter and return types to `SetCookie` methods
-- Added native property types to supported public cURL handler state properties
-- Added `string` return types to `__toString()` methods
-- Normalize and validate proxy no-proxy options consistently across handlers
-- Normalize no-proxy domain and IP literal matching consistently
-- Pass the request as the second argument to `on_headers` callbacks
-- Declare strict types across remaining source files
-- Reject invalid `idn_conversion`, `retries`, and built-in handler `on_stats` option values before use
-- Reject invalid `SetCookie` constructor field types instead of coercing them
-- Reject conflicting raw cURL request options, including request-level `CURLOPT_SHARE`
-- Reject selected request options ignored by incompatible built-in handlers
-- Support retry delay callbacks with retry count only or full retry context
-- Treat only `null` as an omitted path or name when clearing cookies
-- Validate malformed `auth` request option arrays
-- Stop forwarding the generic `auth` request option when following cross-origin redirects
-- Reject invalid `HandlerStack::remove()` arguments
-- Require `Pool` request collections to be iterable
-- Raised the minimum supported libcurl version for the built-in cURL handlers to 7.34.0
-- Store response cookies without a `Domain` attribute as host-only cookies
-- Tighten invalid response handling and avoid exposing response-derived cURL stats
-- Reject malformed response protocol versions and reason phrases
-- Wrap malformed redirect `Location` values in `BadResponseException`
-- Default HTTPS requests sent by the built-in cURL and stream handlers to TLS 1.2 or newer
-- Apply the stream handler `crypto_method` option through the SSL context so it consistently controls the minimum TLS version
-- Validate built-in handler timeout options before applying them
-- Classify empty, malformed, or handler-unsupported request protocol versions as request exceptions
-- Classify additional cURL transport failures without a response as network exceptions
-- Throw `TimeoutException` for reliably detected transfer timeouts
-- Treat request method names case-sensitively in built-in handler and redirect method-specific behavior
-- Treat PHP resources passed as `sink` as caller-owned in the built-in cURL and stream handlers
-- Use the configured PSR-17 URI factory when parsing redirect `Location` headers
-- Avoid stale authenticated proxy tunnels on affected libcurl versions
-- Allow built-in cURL handler `progress` callbacks to abort transfers with truthy return values
-- Normalize built-in handler `progress` callback arguments to integer byte counts
-- Reject built-in cURL handler `progress` callback throwables with `RequestException`
-- Release built-in cURL easy handles before invoking `on_stats`
-- Prefer `CURLOPT_XFERINFOFUNCTION` for built-in cURL progress callbacks when available
-- Reject cURL multi handler promises when transfer completion callbacks throw during manual event-loop ticks
-- Made `MessageFormatter` final and required `Middleware::log()` formatters to implement `MessageFormatterInterface`
-- Made `GuzzleHttp\Handler\CurlFactory`, `GuzzleHttp\Handler\CurlHandler`, `GuzzleHttp\Handler\CurlMultiHandler`, `GuzzleHttp\Handler\MockHandler`, and `GuzzleHttp\Handler\StreamHandler` final
-- Made static utility classes non-instantiable and declared `GuzzleHttp\Handler\Proxy` final
-
-### Removed
-
-- Dropped support for PHP 7.2 and 7.3
-- Removed support for the `GUZZLE_CURL_SELECT_TIMEOUT` environment variable; use `CurlMultiHandler`'s `select_timeout` option
-- Removed direct access to `CurlMultiHandler::$_mh`; pass `CURLMOPT_*` values through constructor `options` instead
-- Removed `RedirectMiddleware::$defaultSettings`; use `RedirectMiddleware::DEFAULT_SETTINGS`
-- Removed the deprecated `RetryMiddleware::exponentialDelay()` method
-- Removed `Utils::isHostInNoProxy()`; use `ProxyOptions` helpers for Guzzle 8 no-proxy matching
-
-
-## 7.11.0 - Upcoming
-
-### Added
-
-- Added persistent cURL share modes for handler-managed cURL sharing
-- Added the `protocols` request option to restrict allowed URI schemes for request transfers
-- Added `cert_type` and `ssl_key_type` request options for TLS certificate and private-key file types
-- Added PHP stream handler support for the `ssl_key` request option
-- Added handler-lifetime cURL sharing through `curl_share` and cURL handler `share` options
-
-### Changed
-
-- Adjusted `guzzlehttp/psr7` version constraint to `^2.10`
-- Allowed domainless `SetCookie` instances to be stored without wildcard request matching
-- Changed no-proxy matching to respect request ports for host-and-port rules
-- Prevented `CurlMultiHandler` destructors from throwing during cleanup
-- Improved invalid response handling across handlers
-
-### Deprecated
-
-- Deprecated empty and malformed request protocol versions, which will be rejected in 8.0
-- Deprecated conflicting raw cURL request options, including `CURLOPT_SHARE`, which will be rejected in 8.0
-- Deprecated scalar-coerced `idn_conversion` request option values, which will be rejected in 8.0
-- Deprecated selected request options ignored by incompatible built-in handlers, which will be rejected in 8.0
-- Deprecated `RetryMiddleware::exponentialDelay()`, which will be removed in 8.0
-
-
-## 7.10.5 - Upcoming
-
-### Fixed
-
-- Defer cURL multi cancellation cleanup until after progress callbacks return.
-
-
-## 7.10.4 - 2025-05-22
-
-### Fixed
-
-- Fix IPv6 literal matching in no-proxy rules
-- Handle cURL multi completion messages without handles after cancelled transfers
-- Fix magic client request methods such as `options()` to uppercase inferred HTTP methods
-
-
-## 7.10.3 - 2025-05-20
-
-### Fixed
-
-- Fail clearly when an HTTP response header line is invalid
-- Remove middleware by name when the name is also a callable string
-- Treat empty request protocol versions as HTTP/1.1
-
-
-## 7.10.2 - 2026-05-20
-
-### Fixed
-
-- Normalize HTTP version request options before applying them to PSR-7 requests
-- Use string values for headers generated by request preparation and response decoding
-
-
-## 7.10.1 - 2026-05-19
-
-### Fixed
-
-- Fail clearly when cURL options cannot be applied
-- Fail clearly when the certificate option is malformed
-- Fail clearly when JSON decode depth is invalid
-- Fail clearly when session cookie data is malformed
-- Fail clearly when the stream progress option is not callable
-- Prevent response creation failures from exposing stale cURL responses
-
-
-## 7.10.0 - 2025-08-23
-
-### Added
-
-- Support for PHP 8.5
-
-### Changed
-
-- Adjusted `guzzlehttp/promises` version constraint to `^2.3`
-- Adjusted `guzzlehttp/psr7` version constraint to `^2.8`
-
-
-## 7.9.3 - 2025-03-27
-
-### Changed
-
-- Remove explicit content-length header for GET requests
-- Improve compatibility with bad servers for boolean cookie values
-
-
-## 7.9.2 - 2024-07-24
-
-### Fixed
-
-- Adjusted handler selection to use cURL if its version is 7.21.2 or higher, rather than 7.34.0
-
-
-## 7.9.1 - 2024-07-19
-
-### Fixed
-
-- Fix TLS 1.3 check for HTTP/2 requests
-
-
 ## 7.9.0 - 2024-07-18
 
 ### Changed
@@ -1078,7 +901,7 @@ interfaces.
 ## 4.0.0 - 2014-03-29
 
 * For information on changes and upgrading, see:
-  https://github.com/guzzle/guzzle/blob/4.x/UPGRADING.md#3x-to-40
+  https://github.com/guzzle/guzzle/blob/master/UPGRADING.md#3x-to-40
 * Added `GuzzleHttp\batch()` as a convenience function for sending requests in
   parallel without needing to write asynchronous code.
 * Restructured how events are added to `GuzzleHttp\ClientInterface::sendAll()`.
@@ -1111,7 +934,7 @@ interfaces.
 
 ## 4.0.0-rc.1 - 2014-03-15
 
-* See https://github.com/guzzle/guzzle/blob/4.x/UPGRADING.md#3x-to-40
+* See https://github.com/guzzle/guzzle/blob/master/UPGRADING.md#3x-to-40
 
 ## 3.8.1 - 2014-01-28
 

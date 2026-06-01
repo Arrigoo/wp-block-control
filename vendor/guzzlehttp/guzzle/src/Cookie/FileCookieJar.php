@@ -1,7 +1,5 @@
 <?php
 
-declare(strict_types=1);
-
 namespace GuzzleHttp\Cookie;
 
 use GuzzleHttp\Utils;
@@ -14,21 +12,12 @@ class FileCookieJar extends CookieJar
     /**
      * @var string filename
      */
-    private string $filename;
+    private $filename;
 
     /**
      * @var bool Control whether to persist session cookies or not.
      */
-    private bool $storeSessionCookies;
-
-    /**
-     * @var bool Whether to save the cookie jar on destruction.
-     *
-     * Disabled by __wakeup() to prevent FileCookieJar from being used as a
-     * PHP object injection file-write gadget when an application unserializes
-     * attacker-controlled data.
-     */
-    private bool $autoSave = true;
+    private $storeSessionCookies;
 
     /**
      * Create a new FileCookieJar object
@@ -55,17 +44,7 @@ class FileCookieJar extends CookieJar
      */
     public function __destruct()
     {
-        if ($this->autoSave) {
-            $this->save($this->filename);
-        }
-    }
-
-    /**
-     * Disable automatic persistence after unserialization.
-     */
-    public function __wakeup(): void
-    {
-        $this->autoSave = false;
+        $this->save($this->filename);
     }
 
     /**
@@ -85,7 +64,7 @@ class FileCookieJar extends CookieJar
             }
         }
 
-        $jsonStr = Utils::jsonEncode($json, \JSON_HEX_TAG);
+        $jsonStr = Utils::jsonEncode($json);
         if (false === \file_put_contents($filename, $jsonStr, \LOCK_EX)) {
             throw new \RuntimeException("Unable to save file {$filename}");
         }
@@ -113,15 +92,7 @@ class FileCookieJar extends CookieJar
         $data = Utils::jsonDecode($json, true);
         if (\is_array($data)) {
             foreach ($data as $cookie) {
-                if (!\is_array($cookie)) {
-                    throw new \RuntimeException("Invalid cookie file: {$filename}");
-                }
-
-                try {
-                    $this->setCookie(new SetCookie($cookie));
-                } catch (\InvalidArgumentException $e) {
-                    throw new \RuntimeException("Invalid cookie file: {$filename}", 0, $e);
-                }
+                $this->setCookie(new SetCookie($cookie));
             }
         } elseif (\is_scalar($data) && !empty($data)) {
             throw new \RuntimeException("Invalid cookie file: {$filename}");

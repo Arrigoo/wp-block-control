@@ -6,10 +6,6 @@ namespace GuzzleHttp\Psr7;
 
 final class Query
 {
-    private function __construct()
-    {
-    }
-
     /**
      * Parse a query string into an associative array.
      *
@@ -30,19 +26,15 @@ final class Query
         }
 
         if ($urlEncoding === true) {
-            $decoder = function (string $value): string {
-                return \rawurldecode(str_replace('+', ' ', $value));
+            $decoder = function ($value) {
+                return rawurldecode(str_replace('+', ' ', (string) $value));
             };
         } elseif ($urlEncoding === PHP_QUERY_RFC3986) {
-            $decoder = static function (string $value): string {
-                return \rawurldecode($value);
-            };
+            $decoder = 'rawurldecode';
         } elseif ($urlEncoding === PHP_QUERY_RFC1738) {
-            $decoder = static function (string $value): string {
-                return \urldecode($value);
-            };
+            $decoder = 'urldecode';
         } else {
-            $decoder = function (string $str): string {
+            $decoder = function ($str) {
                 return $str;
             };
         }
@@ -90,33 +82,31 @@ final class Query
                 return $str;
             };
         } elseif ($encoding === PHP_QUERY_RFC3986) {
-            $encoder = static function (string $value): string {
-                return \rawurlencode($value);
-            };
+            $encoder = 'rawurlencode';
         } elseif ($encoding === PHP_QUERY_RFC1738) {
-            $encoder = static function (string $value): string {
-                return \urlencode($value);
-            };
+            $encoder = 'urlencode';
         } else {
             throw new \InvalidArgumentException('Invalid type');
         }
+
+        $castBool = $treatBoolsAsInts ? static function ($v) { return (int) $v; } : static function ($v) { return $v ? 'true' : 'false'; };
 
         $qs = '';
         foreach ($params as $k => $v) {
             $k = $encoder((string) $k);
             if (!is_array($v)) {
                 $qs .= $k;
-                $v = self::normalizeValue($v, $treatBoolsAsInts);
+                $v = is_bool($v) ? $castBool($v) : $v;
                 if ($v !== null) {
-                    $qs .= '='.$encoder($v);
+                    $qs .= '='.$encoder((string) $v);
                 }
                 $qs .= '&';
             } else {
                 foreach ($v as $vv) {
                     $qs .= $k;
-                    $vv = self::normalizeValue($vv, $treatBoolsAsInts);
+                    $vv = is_bool($vv) ? $castBool($vv) : $vv;
                     if ($vv !== null) {
-                        $qs .= '='.$encoder($vv);
+                        $qs .= '='.$encoder((string) $vv);
                     }
                     $qs .= '&';
                 }
@@ -124,29 +114,5 @@ final class Query
         }
 
         return $qs ? (string) substr($qs, 0, -1) : '';
-    }
-
-    /**
-     * @param mixed $value
-     */
-    private static function normalizeValue($value, bool $treatBoolsAsInts): ?string
-    {
-        if ($value === null) {
-            return null;
-        }
-
-        if (is_bool($value)) {
-            return $treatBoolsAsInts ? (string) (int) $value : ($value ? 'true' : 'false');
-        }
-
-        if (is_scalar($value)) {
-            return (string) $value;
-        }
-
-        if (is_object($value) && method_exists($value, '__toString')) {
-            return $value->__toString();
-        }
-
-        throw new \InvalidArgumentException('Query string values must be scalar, null, or stringable objects');
     }
 }
