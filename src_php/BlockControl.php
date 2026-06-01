@@ -64,25 +64,12 @@ class BlockControl {
         $cdpUser = AdminSettings::get_config_value('api_user');
         $apiKey = AdminSettings::get_config_value('api_secret');
 
-        // TEMPORARY DEBUG: log the settings used to fetch segments.
-        error_log(sprintf(
-            '[Arrigoo CDP DEBUG] Fetching segments with api_url=%s, api_user=%s, api_secret=%s',
-            var_export($apiUrl, true),
-            var_export($cdpUser, true),
-            $apiKey ? '***set (len ' . strlen($apiKey) . ')***' : var_export($apiKey, true)
-        ));
-
         if (!$apiUrl || !$apiKey || !$cdpUser) {
-            error_log('[Arrigoo CDP DEBUG] Aborting: one or more credentials are empty.');
             return [];
         }
         try {
             $client = CdpClient::create($apiUrl, $cdpUser, $apiKey);
             $segments = $client->getSegments();
-
-            // TEMPORARY DEBUG: log the complete response from the CDP.
-            error_log('[Arrigoo CDP DEBUG] getSegments() response: ' . var_export($segments, true));
-
             $segment_cache = [
                 'segments' => $segments,
                 'expire' => $now + self::CACHE_EXPIRE,

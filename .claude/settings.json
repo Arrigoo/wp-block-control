@@ -1,7 +1,0 @@
-{
-  "permissions": {
-    "allow": [
-      "Bash(php -l /home/kristougher/Projects/Arrigoo/wp-block-control/src_php/BlockControl.php)"
-    ]
-  }
-}
