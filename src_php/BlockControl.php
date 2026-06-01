@@ -77,7 +77,7 @@ class BlockControl {
             update_option('ARRIGOO_CDP', $segment_cache);
             return $segments;
         } catch (GuzzleException $e) {
-            return [];
+            return $cached_segments['segments'];
         }
     }
 }

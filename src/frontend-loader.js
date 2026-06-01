@@ -14,7 +14,6 @@
 
     var config = window.arrigooConfig || {};
     var arrigooScriptLoaded = false;
-    var blocksProcessed = false;
 
     /**
      * Load the Arrigoo CDP bundle script
@@ -33,16 +32,7 @@
      * Process blocks based on user segments
      */
     function processBlocks() {
-        // if (blocksProcessed) return;
-        // blocksProcessed = true;
-
         var user_segments = window.argo ? window.argo.get('s') : null;
-        if (!user_segments) {
-            try {
-                var profile = JSON.parse(atob(sessionStorage.getItem('arrigoocdp')));
-                if (profile) user_segments = profile.s;
-            } catch (e) {}
-        }
         var blocks = document.querySelectorAll('[data-segments]');
         var unknownUser = !user_segments || user_segments.length === 0;
 
@@ -95,13 +85,31 @@
     }
 
     function initScript() {
-        // Set up ao_loaded event listener for when CDP script loads
+        var processed = false;
+        function runOnce() {
+            if (processed) return;
+            processed = true;
+            processBlocks();
+        }
+
+        // Bundle is up. Fire the init pageview so the API returns segments.
+        // Also process now for returning sessions where segments are already
+        // cached in sessionStorage and readable via argo.get('s').
         window.document.addEventListener('ao_loaded', function() {
             if (window.argo) {
                 window.argo.sendInitEvent();
+                if (window.argo.get('s')) runOnce();
             }
-            processBlocks();
         }, false);
+
+        // API response has populated segments — primary trigger for new sessions.
+        window.document.addEventListener('ao_recognized', runOnce, false);
+
+        // Safety net: bundle.js only dispatches ao_recognized when the response
+        // carries profile data. First-time visitors with no profile would
+        // otherwise stay hidden forever. Also catches the case where the bundle
+        // never loads (e.g., network failure, blocked by consent).
+        setTimeout(runOnce, 1000);
     }
 
     /**
@@ -114,15 +122,8 @@
         none: function() {
             if (config.frontendScriptEnabled) {
                 loadArrigooScript();
-                initScript();
-            } else {
-                let arrigooLoaded = false;
-                window.document.addEventListener('ao_loaded', function() {
-                    arrigooLoaded = true;
-                    processBlocks();
-                }, false);
-                onDomReady(() => { setTimeout(() => { if (!arrigooLoaded) processBlocks(); }, 300) });
             }
+            initScript();
         },
 
         /**
