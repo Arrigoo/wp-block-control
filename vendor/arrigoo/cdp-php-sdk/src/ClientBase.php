@@ -24,7 +24,13 @@ abstract class ClientBase
         $response = $this->client->get(self::API_VERSION . '/' . $path, [
             'headers' => $this->getHeadersWithKey(),
         ]);
-        return json_decode($response->getBody()->getContents(), true);
+        try {
+            $body = $response->getBody()->getContents();
+            $rBody = json_decode($body, true, 512, JSON_THROW_ON_ERROR);
+        } catch (\JsonException $e) {
+            return [];
+        }
+        return $rBody ?? [];
     }
 
     // Refresh the API key.
@@ -35,9 +41,13 @@ abstract class ClientBase
         $response = $this->client->post('security/refresh', [
             'headers' => $headers,
         ]);
-        $rBody = json_decode($response->getBody()->getContents(), true);
-        $this->apiKey = $rBody['access_token'];
-        $this->keyExpiresAt = $rBody['expiry'];
+        try {
+            $rBody = json_decode($response->getBody()->getContents(), true,  512, JSON_THROW_ON_ERROR);
+            $this->apiKey = $rBody['access_token'];
+            $this->keyExpiresAt = $rBody['expiry'];
+        } catch (\JsonException $e) {
+            // Just no access.
+        }
     }
 
     /**
@@ -102,7 +112,12 @@ abstract class ClientBase
                 'secret' => $password,
             ],
         ]);
-        $rBody = json_decode($response->getBody()->getContents(), true);
-        return $rBody;
+        $body = $response->getBody()->getContents();
+        try {
+            $rBody = json_decode($body, true, 512, JSON_THROW_ON_ERROR);
+        } catch (\JsonException $e) {
+            return [];
+        }
+        return $rBody ?? [];
     }
 }
