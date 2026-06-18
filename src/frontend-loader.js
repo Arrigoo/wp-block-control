@@ -121,7 +121,7 @@
         // arrives (network failure, blocked by consent, loaded externally and
         // absent). Long enough not to beat a slow-but-successful recognition;
         // when it does fire, no segments will arrive and unknown is correct.
-        setTimeout(runOnce, 5000);
+        setTimeout(runOnce, 2000);
     }
 
     /**
