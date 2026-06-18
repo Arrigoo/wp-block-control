@@ -66,7 +66,9 @@
             }
 
             if (showBlock) {
-                block.style.display = 'block';
+                // Drop the attribute so the hide-all `*[data-segments]` rule no
+                // longer matches and the block reverts to its CSS-defined display.
+                block.removeAttribute('data-segments');
             } else {
                 block.remove();
             }
@@ -96,20 +98,30 @@
         // Also process now for returning sessions where segments are already
         // cached in sessionStorage and readable via argo.get('s').
         window.document.addEventListener('ao_loaded', function() {
-            if (window.argo) {
-                window.argo.sendInitEvent();
-                if (window.argo.get('s')) runOnce();
-            }
+            // ao_loaded is only dispatched by a method on window.argo, so argo
+            // is guaranteed to be set here — no need to guard.
+            window.argo.sendInitEvent();
+            var cached = window.argo.get('s');
+            if (cached && cached.length) runOnce();
         }, false);
 
-        // API response has populated segments — primary trigger for new sessions.
+        // API response carried profile/segments. The bundle sets its segment
+        // store immediately before dispatching this, so argo.get('s') is
+        // populated here — primary trigger for a freshly recognized visitor.
         window.document.addEventListener('ao_recognized', runOnce, false);
 
-        // Safety net: bundle.js only dispatches ao_recognized when the response
-        // carries profile data. First-time visitors with no profile would
-        // otherwise stay hidden forever. Also catches the case where the bundle
-        // never loads (e.g., network failure, blocked by consent).
-        setTimeout(runOnce, 1000);
+        // The init pageview response has returned. bundle.js dispatches this on
+        // every event response, immediately AFTER ao_recognized in the same
+        // callback. So if the visitor was recognized, runOnce already executed
+        // above; if they genuinely have no profile, this is the precise moment
+        // to process them as unknown — with no race against network latency.
+        window.document.addEventListener('ao_event_sent', runOnce, false);
+
+        // Last-resort net for when the bundle never loads or no response ever
+        // arrives (network failure, blocked by consent, loaded externally and
+        // absent). Long enough not to beat a slow-but-successful recognition;
+        // when it does fire, no segments will arrive and unknown is correct.
+        setTimeout(runOnce, 5000);
     }
 
     /**

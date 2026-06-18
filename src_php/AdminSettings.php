@@ -36,6 +36,7 @@ class AdminSettings {
                     'cookie_consent_provider' => 'none',
                     'cookie_consent_category' => 'functional',
                     'frontend_script_enabled' => true,
+                    'loader_position' => 'footer',
                 ]
             ]
         );
@@ -86,6 +87,14 @@ class AdminSettings {
             'arrigoo-cdp-settings',
             'arrigoo_cdp_main_section'
         );
+
+        add_settings_field(
+            'loader_position',
+            'Loader Script Position',
+            [self::class, 'render_loader_position_field'],
+            'arrigoo-cdp-settings',
+            'arrigoo_cdp_main_section'
+        );
     }
 
     /**
@@ -110,6 +119,11 @@ class AdminSettings {
 
         $sanitized['frontend_script_enabled'] = isset($input['frontend_script_enabled']) ? (bool) $input['frontend_script_enabled'] : false;
 
+        $valid_positions = array_keys(self::get_loader_positions());
+        $sanitized['loader_position'] = isset($input['loader_position']) && in_array($input['loader_position'], $valid_positions, true)
+            ? $input['loader_position']
+            : 'footer';
+
         // Clear the segments cache when settings are updated
         delete_option('ARRIGOO_CDP');
 
@@ -127,6 +141,7 @@ class AdminSettings {
             'cookie_consent_provider' => 'none',
             'cookie_consent_category' => 'functional',
             'frontend_script_enabled' => true,
+            'loader_position' => 'footer',
         ];
 
         $options = get_option(self::OPTION_NAME, $defaults);
@@ -314,6 +329,37 @@ class AdminSettings {
                value="<?php echo esc_attr($value); ?>"
                class="regular-text">
         <p class="description">Your CDP API secret key.</p>
+        <?php
+    }
+
+    /**
+     * Get available loader script positions.
+     */
+    public static function get_loader_positions() {
+        return [
+            'header' => 'Header',
+            'footer' => 'Footer',
+        ];
+    }
+
+    /**
+     * Render Loader Script Position field.
+     */
+    public static function render_loader_position_field() {
+        $options = get_option(self::OPTION_NAME, ['loader_position' => 'footer']);
+        $current = isset($options['loader_position']) ? $options['loader_position'] : 'footer';
+        $positions = self::get_loader_positions();
+        ?>
+        <select id="loader_position"
+                name="<?php echo esc_attr(self::OPTION_NAME); ?>[loader_position]"
+                class="regular-text">
+            <?php foreach ($positions as $value => $label): ?>
+                <option value="<?php echo esc_attr($value); ?>" <?php selected($current, $value); ?>>
+                    <?php echo esc_html($label); ?>
+                </option>
+            <?php endforeach; ?>
+        </select>
+        <p class="description">Where to load the segment visibility script. <strong>Footer</strong> lets cookie-consent and externally loaded CDP scripts (e.g. via a tag manager) initialize first, but reveals segmented blocks slightly later. <strong>Header</strong> resolves blocks as early as possible &mdash; choose this if the CDP script is loaded by this plugin and an external tag manager is not loading the main script more slowly.</p>
         <?php
     }
 

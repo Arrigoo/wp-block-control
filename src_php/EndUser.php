@@ -15,6 +15,7 @@ class EndUser {
         $consent_category = AdminSettings::get_config_value('cookie_consent_category');
         $frontend_script_enabled = AdminSettings::get_config_value('frontend_script_enabled');
         $apiUrl = AdminSettings::get_config_value('api_url');
+        $loader_in_footer = AdminSettings::get_config_value('loader_position') === 'footer';
 
         // Build URLs
         $bundleUrl = plugin_dir_url(__FILE__) . '../build/bundle.js';
@@ -26,7 +27,7 @@ class EndUser {
             $loaderUrl,
             [],
             filemtime(plugin_dir_path(__FILE__) . '../build/frontend-loader.js'),
-            false // Load in head, not footer
+            $loader_in_footer // Footer lets head-loaded consent/CDP scripts init first
         );
 
         // Output inline configuration and styles
