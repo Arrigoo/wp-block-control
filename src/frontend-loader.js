@@ -100,7 +100,6 @@
         window.document.addEventListener('ao_loaded', function() {
             // ao_loaded is only dispatched by a method on window.argo, so argo
             // is guaranteed to be set here — no need to guard.
-            window.argo.sendInitEvent();
             var cached = window.argo.get('s');
             if (cached && cached.length) runOnce();
         }, false);
@@ -134,6 +133,9 @@
         none: function() {
             if (config.frontendScriptEnabled) {
                 loadArrigooScript();
+                window.document.addEventListener('ao_loaded', function() {
+                    window.argo.sendInitEvent();
+                });
             }
             initScript();
         },
