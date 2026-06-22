@@ -1,6 +1,6 @@
 {
     "name": "arrigoo-segment-block-control-script",
-    "version": "1.2.9",
+    "version": "1.2.10",
     "scripts": {
         "build": "wp-scripts build && cp ./src/bundle.js ./build/.",
         "start": "wp-scripts start"
