@@ -1,10 +1,8 @@
 <?php
 
-declare(strict_types=1);
-
 namespace GuzzleHttp\Handler;
 
-use GuzzleHttp\Utils;
+use GuzzleHttp\TransportSharing;
 
 /**
  * @internal
@@ -12,14 +10,17 @@ use GuzzleHttp\Utils;
 final class CurlShareHandleState
 {
     /**
-     * @var resource|\CurlShareHandle|\CurlSharePersistentHandle|null
+     * @var resource|\CurlShareHandle|null
      */
     public $handle;
 
-    public string $mode;
+    /**
+     * @var string
+     */
+    public $mode;
 
     /**
-     * @param resource|\CurlShareHandle|\CurlSharePersistentHandle|null $handle
+     * @param resource|\CurlShareHandle|null $handle
      */
     private function __construct(string $mode, $handle)
     {
@@ -28,87 +29,85 @@ final class CurlShareHandleState
     }
 
     /**
-     * @param mixed $share
+     * @param mixed $sharing
      */
-    public static function fromOption($share): ?self
+    public static function fromOption($sharing): ?self
     {
-        if ($share instanceof self) {
-            return $share;
+        if ($sharing instanceof self) {
+            return $sharing;
         }
 
-        $mode = self::normalizeMode($share, 'share');
-        if ($mode === CurlShare::NONE) {
+        $mode = self::normalizeMode($sharing, 'transport_sharing');
+        if ($mode === TransportSharing::NONE) {
             return null;
         }
 
-        if ($mode === CurlShare::HANDLER) {
-            return self::createHandlerShare($mode);
+        if ($mode === TransportSharing::HANDLER_PREFER) {
+            return self::createHandlerShareOrNull($mode);
         }
 
-        if ($mode === CurlShare::PERSISTENT_PREFER) {
-            return self::createPersistentShareOrFallback();
-        }
-
-        return self::createPersistentShare($mode);
+        return self::createHandlerShare($mode);
     }
 
     /**
-     * @param mixed $share
+     * @param mixed $sharing
      */
-    public static function normalizeMode($share, string $option): string
+    public static function normalizeMode($sharing, string $option): string
     {
-        if ($share instanceof self) {
-            return $share->mode;
+        if ($sharing instanceof self) {
+            return $sharing->mode;
         }
 
-        if ($share === null || $share === CurlShare::NONE) {
-            return CurlShare::NONE;
+        if ($sharing === null || $sharing === TransportSharing::NONE) {
+            return TransportSharing::NONE;
         }
 
-        if (
-            $share === CurlShare::HANDLER
-            || $share === CurlShare::PERSISTENT_PREFER
-            || $share === CurlShare::PERSISTENT_REQUIRE
-        ) {
-            return $share;
+        if ($sharing === TransportSharing::HANDLER_PREFER || $sharing === TransportSharing::HANDLER_REQUIRE) {
+            return $sharing;
         }
 
         throw new \InvalidArgumentException(\sprintf(
-            'The "%s" option must be null or a GuzzleHttp\\Handler\\CurlShare::* constant; received %s.',
+            'The "%s" option must be null or a GuzzleHttp\\TransportSharing::* constant; received %s.',
             $option,
-            Utils::describeType($share)
+            \get_debug_type($sharing)
         ));
     }
 
-    public static function assertNoCustomFactoryConflict(array $options, string $handlerName): void
+    public static function assertNoRequiredSharingCustomFactoryConflict(array $options, string $handlerName): void
     {
-        if (
-            !\array_key_exists('handle_factory', $options)
-            || $options['handle_factory'] === null
-        ) {
+        if (!\array_key_exists('handle_factory', $options) || $options['handle_factory'] === null) {
             return;
         }
 
-        $mode = self::normalizeMode($options['share'] ?? null, 'share');
-        if ($mode === CurlShare::NONE) {
+        $mode = self::normalizeMode($options['transport_sharing'] ?? null, 'transport_sharing');
+        if ($mode !== TransportSharing::HANDLER_REQUIRE) {
             return;
         }
 
         throw new \InvalidArgumentException(\sprintf(
-            'The "share" %s option cannot be used with a custom "handle_factory" because Guzzle cannot ensure that the custom factory applies CURLOPT_SHARE.',
+            'The "transport_sharing" %s option cannot require sharing with a custom "handle_factory" because Guzzle cannot ensure that the custom factory applies CURLOPT_SHARE.',
             $handlerName
         ));
+    }
+
+    private static function createHandlerShareOrNull(string $mode): ?self
+    {
+        try {
+            return self::createHandlerShare($mode);
+        } catch (\Throwable $e) {
+            return null;
+        }
     }
 
     private static function createHandlerShare(string $mode): self
     {
         if (!\function_exists('curl_share_init') || !\function_exists('curl_share_setopt')) {
-            throw new \InvalidArgumentException('The cURL handler option "share" requires cURL share support.');
+            throw new \InvalidArgumentException('The "transport_sharing" option requires cURL share support.');
         }
 
         self::requireCurlConstant('CURLOPT_SHARE');
         $shareOption = self::requireCurlConstant('CURLSHOPT_SHARE');
-        $locks = self::handlerLocks();
+        $locks = self::handlerLocks($mode);
         $handle = curl_share_init();
 
         try {
@@ -132,77 +131,33 @@ final class CurlShareHandleState
         return new self($mode, $handle);
     }
 
-    private static function createPersistentShareOrFallback(): self
-    {
-        if (!self::supportsPersistentShare()) {
-            return self::createHandlerShare(CurlShare::HANDLER);
-        }
-
-        try {
-            return self::createPersistentShare(CurlShare::PERSISTENT_PREFER);
-        } catch (\Throwable $e) {
-            return self::createHandlerShare(CurlShare::HANDLER);
-        }
-    }
-
-    private static function createPersistentShare(string $mode): self
-    {
-        if (!self::supportsPersistentShare()) {
-            throw new \InvalidArgumentException('The cURL handler option "share" requires persistent cURL share handle support.');
-        }
-
-        self::requireCurlConstant('CURLOPT_SHARE');
-
-        try {
-            $handle = curl_share_init_persistent(self::persistentLocks());
-        } catch (\Throwable $e) {
-            throw new \InvalidArgumentException(
-                'Unable to create persistent cURL share handle: '.$e->getMessage(),
-                0,
-                $e
-            );
-        }
-
-        return new self($mode, $handle);
-    }
-
-    private static function supportsPersistentShare(): bool
-    {
-        return \function_exists('curl_share_init_persistent')
-            && \class_exists('CurlSharePersistentHandle')
-            && \defined('CURL_LOCK_DATA_DNS')
-            && \defined('CURL_LOCK_DATA_CONNECT')
-            && \defined('CURL_LOCK_DATA_SSL_SESSION');
-    }
-
     /**
      * @return int[]
      */
-    private static function handlerLocks(): array
+    private static function handlerLocks(string $mode): array
     {
-        return [
-            self::requireCurlConstant('CURL_LOCK_DATA_DNS'),
-            self::requireCurlConstant('CURL_LOCK_DATA_SSL_SESSION'),
-        ];
-    }
+        CurlVersion::ensureHandlerSharingSupported();
 
-    /**
-     * @return int[]
-     */
-    private static function persistentLocks(): array
-    {
-        return [
+        if ($mode === TransportSharing::HANDLER_REQUIRE) {
+            CurlVersion::ensureSslSessionSharingSupported();
+        }
+
+        $locks = [
             self::requireCurlConstant('CURL_LOCK_DATA_DNS'),
-            self::requireCurlConstant('CURL_LOCK_DATA_CONNECT'),
-            self::requireCurlConstant('CURL_LOCK_DATA_SSL_SESSION'),
         ];
+
+        if (CurlVersion::supportsSslSessionSharing()) {
+            $locks[] = self::requireCurlConstant('CURL_LOCK_DATA_SSL_SESSION');
+        }
+
+        return $locks;
     }
 
     private static function requireCurlConstant(string $constant): int
     {
         if (!\defined($constant)) {
             throw new \InvalidArgumentException(\sprintf(
-                'The cURL handler option "share" requires %s, but it is not available in the installed PHP cURL extension.',
+                'The "transport_sharing" option requires %s, but it is not available in the installed PHP cURL extension.',
                 $constant
             ));
         }

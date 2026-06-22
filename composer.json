@@ -2,7 +2,7 @@
     "name": "arrigoo/wp-block-control",
     "description": "Control display of your blocks based on segments from the Arrigoo CDP.",
     "type": "wordpress-plugin",
-    "version": "1.2.9",
+    "version": "1.2.10",
     "autoload": {
         "psr-4": {
             "Arrigoo\\WpCdpBlockControl\\": "src_php/"
@@ -14,9 +14,8 @@
             "email": "hey@arrigoo.io"
         }
     ],
-    "minimum-stability": "dev",
     "require": {
-        "arrigoo/cdp-php-sdk": "0.1.3"
+        "arrigoo/cdp-php-sdk": "~0.1.3"
     },
     "license": "MIT"
 }

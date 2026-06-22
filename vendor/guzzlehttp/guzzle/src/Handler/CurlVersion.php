@@ -1,26 +1,27 @@
 <?php
 
-declare(strict_types=1);
-
 namespace GuzzleHttp\Handler;
-
-use GuzzleHttp\Exception\ConnectException;
-use Psr\Http\Message\RequestInterface;
 
 /**
  * @internal
  */
 final class CurlVersion
 {
-    private const MIN_VERSION = '7.34.0';
+    private const MIN_VERSION = '7.21.2';
+
+    private const TLS_12_VERSION = '7.34.0';
 
     private const TLS_13_VERSION = '7.52.0';
 
-    private const HTTP_3_VERSION = '7.66.0';
+    // curl 7.52.0 introduced HTTPS proxy support, advertised by a feature bit
+    // (a build can meet the version yet lack the feature). Earlier libcurl
+    // mishandles an https:// proxy: before 7.50.2 it silently downgrades to a
+    // plaintext HTTP proxy, and 7.50.2 through 7.51 reject it at connect time.
+    private const HTTPS_PROXY_VERSION = '7.52.0';
 
-    private const PROTOCOLS_STR_VERSION = '7.85.0';
+    private const HANDLER_SHARING_VERSION = '7.35.0';
 
-    private const PROXY_CREDENTIAL_REUSE_VERSION = '8.19.0';
+    private const SSL_SESSION_SHARING_VERSION = '8.6.0';
 
     /**
      * @var array{version: string, features: int}|false|null
@@ -31,117 +32,106 @@ final class CurlVersion
     {
     }
 
+    public static function supportsCurlHandler(): bool
+    {
+        $version = self::getVersion();
+
+        return $version !== null && \version_compare($version, self::MIN_VERSION, '>=');
+    }
+
     public static function supportsTls12(): bool
     {
-        $version = self::get();
+        $version = self::getVersion();
 
-        return \defined('CURL_SSLVERSION_TLSv1_2')
-            && null !== $version
-            && version_compare($version, self::MIN_VERSION, '>=');
+        return self::supportsSsl()
+            && \defined('CURL_SSLVERSION_TLSv1_2')
+            && $version !== null
+            && \version_compare($version, self::TLS_12_VERSION, '>=');
     }
 
     public static function supportsTls13(): bool
     {
-        $version = self::get();
+        $version = self::getVersion();
 
-        return \defined('CURL_SSLVERSION_TLSv1_3')
-            && null !== $version
-            && version_compare($version, self::TLS_13_VERSION, '>=');
+        return self::supportsSsl()
+            && \defined('CURL_SSLVERSION_TLSv1_3')
+            && $version !== null
+            && \version_compare($version, self::TLS_13_VERSION, '>=');
     }
 
     public static function supportsHttp2(): bool
     {
+        $versionInfo = self::getVersionInfo();
+
         return self::supportsTls12()
-            && (\CURL_VERSION_HTTP2 & self::getInfo()['features']);
+            && \defined('CURL_VERSION_HTTP2')
+            && $versionInfo !== null
+            && 0 !== (\CURL_VERSION_HTTP2 & $versionInfo['features']);
     }
 
-    public static function supportsHttp3(): bool
-    {
-        if (
-            !self::supportsTls13()
-            || !\defined('CURL_VERSION_HTTP3')
-            || !\defined('CURL_HTTP_VERSION_3')
-        ) {
-            return false;
-        }
-
-        $versionInfo = self::getInfo();
-
-        return version_compare($versionInfo['version'], self::HTTP_3_VERSION, '>=')
-            && 0 !== ((int) \constant('CURL_VERSION_HTTP3') & $versionInfo['features']);
-    }
-
-    public static function supportsProxyCredentialAwareConnectionReuse(): bool
-    {
-        $version = self::get();
-
-        return null !== $version
-            && version_compare($version, self::PROXY_CREDENTIAL_REUSE_VERSION, '>=');
-    }
-
-    public static function supportsProtocolsStr(): bool
-    {
-        $version = self::get();
-
-        return \defined('CURLOPT_PROTOCOLS_STR')
-            && null !== $version
-            && version_compare($version, self::PROTOCOLS_STR_VERSION, '>=');
-    }
-
-    public static function ensureSupported(RequestInterface $request): void
-    {
-        if (self::supportsTls12()) {
-            return;
-        }
-
-        $version = self::get();
-
-        if (null === $version || version_compare($version, self::MIN_VERSION, '<')) {
-            throw new ConnectException(\sprintf(
-                'cURL %s or higher is required by the cURL handler; %s is installed.',
-                self::MIN_VERSION,
-                $version ?? 'an unknown version'
-            ), $request);
-        }
-
-        if (!\defined('CURL_SSLVERSION_TLSv1_2')) {
-            throw new ConnectException(\sprintf(
-                'The PHP cURL extension must be built against cURL %s or higher to use the cURL handler.',
-                self::MIN_VERSION
-            ), $request);
-        }
-    }
-
-    public static function addToHandlerContext(array &$context): void
-    {
-        $version = self::get();
-
-        if (null === $version) {
-            throw new \RuntimeException('Unable to determine cURL version.');
-        }
-
-        $context[CurlFactory::CURL_VERSION_STR] = $version;
-    }
-
-    private static function get(): ?string
+    public static function supportsHttpsProxy(): bool
     {
         $versionInfo = self::getVersionInfo();
 
-        return null === $versionInfo ? null : $versionInfo['version'];
+        // CURL_VERSION_HTTPS_PROXY is not defined on every supported PHP
+        // version; fall back to the curl.h bit value.
+        $httpsProxyFeature = \defined('CURL_VERSION_HTTPS_PROXY') ? \CURL_VERSION_HTTPS_PROXY : (1 << 21);
+
+        return $versionInfo !== null
+            && \version_compare($versionInfo['version'], self::HTTPS_PROXY_VERSION, '>=')
+            && 0 !== ($httpsProxyFeature & $versionInfo['features']);
     }
 
-    /**
-     * @return array{version: string, features: int}
-     */
-    private static function getInfo(): array
+    public static function supportsHandlerSharing(): bool
+    {
+        $version = self::getVersion();
+
+        return $version !== null && \version_compare($version, self::HANDLER_SHARING_VERSION, '>=');
+    }
+
+    public static function ensureHandlerSharingSupported(): void
+    {
+        if (!self::supportsHandlerSharing()) {
+            throw new \InvalidArgumentException(\sprintf(
+                'The "transport_sharing" option requires libcurl %s or higher for cURL share handles.',
+                self::HANDLER_SHARING_VERSION
+            ));
+        }
+    }
+
+    public static function supportsSslSessionSharing(): bool
+    {
+        $version = self::getVersion();
+
+        return self::supportsSsl()
+            && $version !== null
+            && \version_compare($version, self::SSL_SESSION_SHARING_VERSION, '>=');
+    }
+
+    public static function ensureSslSessionSharingSupported(): void
+    {
+        if (!self::supportsSslSessionSharing()) {
+            throw new \InvalidArgumentException(\sprintf(
+                'The "transport_sharing" option requires libcurl %s or higher with SSL support for SSL session sharing.',
+                self::SSL_SESSION_SHARING_VERSION
+            ));
+        }
+    }
+
+    private static function supportsSsl(): bool
     {
         $versionInfo = self::getVersionInfo();
 
-        if (null === $versionInfo) {
-            throw new \RuntimeException('Unable to determine cURL version.');
-        }
+        return \defined('CURL_VERSION_SSL')
+            && $versionInfo !== null
+            && 0 !== (\CURL_VERSION_SSL & $versionInfo['features']);
+    }
 
-        return $versionInfo;
+    public static function getVersion(): ?string
+    {
+        $versionInfo = self::getVersionInfo();
+
+        return $versionInfo === null ? null : $versionInfo['version'];
     }
 
     /**
@@ -149,7 +139,7 @@ final class CurlVersion
      */
     private static function getVersionInfo(): ?array
     {
-        if (null === self::$versionInfo) {
+        if (self::$versionInfo === null) {
             if (!\function_exists('curl_version')) {
                 self::$versionInfo = false;
             } else {
@@ -166,6 +156,6 @@ final class CurlVersion
             }
         }
 
-        return false === self::$versionInfo ? null : self::$versionInfo;
+        return self::$versionInfo === false ? null : self::$versionInfo;
     }
 }

@@ -2,9 +2,9 @@
     "name": "arrigoo/cdp-php-sdk",
     "type": "library",
     "require": {
-        "guzzlehttp/guzzle": "7.9"
+        "guzzlehttp/guzzle": "~7.12"
     },
-    "license": "GPL-2.0-or-later",
+    "license": "MIT",
     "autoload": {
         "psr-4": {
             "Arrigoo\\ArrigooCdpSdk\\": "src/"
