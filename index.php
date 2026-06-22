@@ -3,7 +3,7 @@
 /*
  * Plugin Name: Arrigoo CDP Block control
  * Description: Adds a custom control to all Gutenberg blocks to hide/show the block from different segments.
- * Version: 1.2.7
+ * Version: 1.2.9
  * Author: Arrigoo.io
  */
 
