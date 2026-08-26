@@ -50,6 +50,45 @@ class BlockControl {
     }
 
     /**
+     * Add the data-segments attribute to the rendered block markup.
+     *
+     * The `blocks.getSaveContent.extraProps` filter in src/index.js only reaches
+     * blocks whose save() output is serialized into post content. Dynamic blocks
+     * build their wrapper in PHP at render time, and blocks using apiVersion 2+
+     * only run that filter when save() calls useBlockProps.save(). Applying the
+     * attribute here covers both cases.
+     */
+    public static function arrigoo_cdp_add_segments_to_rendered_block( $block_content, $block ) {
+        $segments = $block['attrs']['selectedSegments'] ?? null;
+
+        if (!is_array($segments) || '' === trim((string) $block_content)) {
+            return $block_content;
+        }
+
+        $segments = array_filter(
+            array_map('trim', array_map('strval', $segments)),
+            static function ($segment) {
+                return '' !== $segment;
+            }
+        );
+
+        if (!$segments) {
+            return $block_content;
+        }
+
+        $processor = new \WP_HTML_Tag_Processor($block_content);
+
+        if (!$processor->next_tag()) {
+            return $block_content;
+        }
+
+        $processor->set_attribute('data-segments', implode(' ', $segments));
+        $processor->add_class('arrigoo-segment-block');
+
+        return $processor->get_updated_html();
+    }
+
+    /**
      * Instanitate the CDP client and request segments for use in admin.
      */
     public static function arrigoo_cdp_get_segments() {

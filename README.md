@@ -27,7 +27,7 @@ The `!` prefix means "hide from this segment". The literal segment `unknown` mat
 
 Hooks are registered in [index.php](index.php). Three classes, all static:
 
-- **BlockControl** — registers the editor JS bundle (`build/index.js`) and injects `window.arrigooCdpSegments` via `wp_add_inline_script`. Adds a `selectedSegments` array attribute to every block via `register_block_type_args`. Owns the CDP segment fetch (cached 5 min in the `ARRIGOO_CDP` option).
+- **BlockControl** — registers the editor JS bundle (`build/index.js`) and injects `window.arrigooCdpSegments` via `wp_add_inline_script`. Adds a `selectedSegments` array attribute to every block via `register_block_type_args`, and writes `data-segments` onto the outermost tag of each block via `render_block`. Owns the CDP segment fetch (cached 5 min in the `ARRIGOO_CDP` option).
 - **EndUser** — emits the frontend `<style>`, `window.arrigooConfig`, and the loader script in `wp_head`.
 - **AdminSettings** — Settings API page under Settings → Arrigoo CDP. Stores credentials and cookie-consent prefs in option `arrigoo_cdp_config`. Clearing settings deletes the segment cache.
 
@@ -40,7 +40,7 @@ Three files, two webpack entries (see [webpack.config.js](webpack.config.js)):
 - **`src/index.js`** (entry `index`) — Editor-side. Three `addFilter` calls:
   - `editor.BlockEdit` adds the `<InspectorControls>` panel with two `FormTokenField`s ("Only show to" and "Hide from"). The UI shows segment **titles** to editors but stores **sys_titles** in `selectedSegments`; hide entries are stored with a `!` prefix.
   - `blocks.registerBlockType` mirrors the PHP attribute registration so the editor knows about `selectedSegments`.
-  - `blocks.getSaveContent.extraProps` writes `data-segments` (space-joined) onto the saved block markup. This is the contract the frontend loader reads.
+  - `blocks.getSaveContent.extraProps` writes `data-segments` (space-joined) onto the saved block markup. Core only runs this filter for `apiVersion` 1 blocks, or for `apiVersion` 2+ blocks whose `save()` calls `useBlockProps.save()` — dynamic blocks never reach it at all. `BlockControl::arrigoo_cdp_add_segments_to_rendered_block` is what guarantees the attribute on the frontend; this filter only keeps it visible in the serialized markup.
 - **`src/frontend-loader.js`** (entry `frontend-loader`) — Vanilla IIFE that wires up consent providers (`none` / `cookieinformation` / `cookiebot`) and gates `loadArrigooScript()` (which injects `bundleUrl`) on the chosen category. When `frontendScriptEnabled` is false under provider `none`, the loader still runs `processBlocks` (after a 300ms grace period) so segment markup is resolved even if the CDP script is loaded elsewhere (e.g., a tag manager).
 - **`src/bundle.js`** — Minified Arrigoo CDP SDK, copied verbatim to `build/`. Not webpack-compiled. Exposes `window.argo` and dispatches `ao_loaded` / `ao_recognized`. Treat as a vendored binary — don't edit by hand.
 
@@ -48,8 +48,9 @@ Three files, two webpack entries (see [webpack.config.js](webpack.config.js)):
 
 ```
 Editor:   CDP API → BlockControl::get_segments (cached) → window.arrigooCdpSegments → FormTokenField
-Save:     selectedSegments attr → data-segments="..." on block HTML
-Render:   wp_head emits hide-all CSS + frontend-loader.js
+Save:     selectedSegments attr stored in the block comment
+Render:   render_block → data-segments="..." on the block wrapper
+          wp_head emits hide-all CSS + frontend-loader.js
 Frontend: consent gate → bundle.js → window.argo.get('s') → show/remove [data-segments] elements
 ```
 
