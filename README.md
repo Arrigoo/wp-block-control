@@ -1,7 +1,5 @@
 # Arrigoo Block control
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
-
 ## What this plugin does
 
 A WordPress plugin that adds a "CDP Segment control" panel to every Gutenberg block's inspector. Editors pick segments (from the Arrigoo CDP) that the block should be shown to or hidden from. All blocks still render server-side; a frontend script reads the visitor's segments from the Arrigoo CDP and either reveals or removes the marked blocks in the DOM.
